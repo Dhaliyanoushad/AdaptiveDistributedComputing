@@ -1,0 +1,39 @@
+# Python environments, caches and build artifacts
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.coverage
+htmlcov/
+
+# JavaScript dependencies and build output
+node_modules/
+frontend/dist/
+.vite/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.log
+
+# Uploaded datasets and generated artifacts
+datasets/
+uploads/
+test_images/*
+!test_images/.gitkeep
+outputs/*
+!outputs/.gitkeep
+
+# Editor / operating system metadata
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
