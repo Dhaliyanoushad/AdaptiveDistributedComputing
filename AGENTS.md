@@ -8,7 +8,9 @@
 - `tests/`: future unit and integration tests; `docs/`: design and experiment notes.
 - `test_images/` and `outputs/`: local data and generated artifacts, excluded from Git.
 - Do not introduce a database or machine learning without an explicit scope change.
-- Initialization must remain scaffold-only: no communication, task processing, scheduling, heartbeat or UI implementation.
+- Phase 2 permits HTTP health checks, worker registration/listing, an in-memory dummy-task registry/FIFO queue, static round-robin distribution and worker polling/start/completion/failure updates. Do not implement image processing, adaptive scheduling, heartbeat, fault recovery or UI without further authorization.
+- Run one master process. Synchronize registry, queue, assignment and transition changes with the store lock. Registered idle workers are eligible; each may hold one active task. Preserve ownership checks and idempotent completion.
+- Worker reconnection, task redelivery and retries are not supported yet. Keep duplicate registration protection.
 
 ## Conventions
 
