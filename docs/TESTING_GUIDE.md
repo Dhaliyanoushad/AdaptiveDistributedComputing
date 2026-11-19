@@ -1,4 +1,18 @@
-# Teammate testing guide — Phases 1, 2 and 3
+# Consolidated teammate testing guide — Phases 1–8
+
+## Current handoff entry point and evidence status
+
+Use README.md and Phase 8 below for current relative commands. Earlier phase procedures retain their original objectives/prerequisites/actions/inputs/expected responses; later scope updates supersede historical no-recovery/no-frontend statements. Use TEST_EXECUTION_TEMPLATE.md for each case, never expected results as assumed passes.
+
+| Category | Current status |
+| --- | --- |
+| Automated execution | TEST_RESULTS.md and ignored outputs/verification/UUID logs; not manual acceptance |
+| Teammate manual checks verified with evidence | None supplied; no case pre-marked Pass |
+| Localhost/browser/LAN/performance acceptance | NOT YET EXECUTED unless a later record proves otherwise |
+| Restricted-context socket operation | BLOCKED: ephemeral connect WinError 10013 despite successful binds |
+| Development-tool remediation | BLOCKED by registry DNS; 1 moderate/2 critical findings remain |
+
+Outcome choices throughout are **Pass / Fail / Blocked / Not Tested**. Leave cells blank until executed. TEST_EXECUTION_TEMPLATE.md supplies objective, prerequisites, actions, inputs, expected/actual, evidence, defects and retest fields for every phase case.
 
 **Phase 5 compatibility update:** Sections 1-8 remain as historical phase procedures. The Phase 5 section supersedes earlier expectations of stuck modern-worker tasks after timeout. They are now retried up to the configured budget. Session-aware hand-driven task/image requests additionally need `X-Task-Assignment` from the polling response. Legacy manual Phase 1-3 examples remain first-attempt/static compatibility tests only. Never interpret historical no-recovery statements as the current Phase 5 policy.
 
@@ -229,7 +243,7 @@ Tester: __________  Date: __________  Revision: __________  Windows/Python: ____
 
 Leave outcome cells blank until actually executed. Use Pass, Fail or Blocked with evidence; do not copy automated passes into manual outcomes.
 
-| ID | Manual case | Pass/Fail/Blocked | Evidence / issue / retest |
+| ID | Manual case | Pass/Fail/Blocked/Not Tested | Evidence / issue / retest |
 | --- | --- | --- | --- |
 | S1 | CMD setup, both environments and dependency checks | | |
 | P1-1 | Health, empty/listed workers, registration and logs | | |
@@ -371,7 +385,7 @@ Run one master process. No persistence, authenticated enrollment, adaptive sched
 
 For future two-laptop testing, use the existing LAN section, the same heartbeat variables and unique IDs. Check metrics/last_seen from both devices, interrupt the remote worker, wait for offline, then restart it. **LAN cases remain NOT YET EXECUTED.**
 
-| ID | Phase 4 manual case | Pass/Fail/Blocked | Evidence / issue / retest |
+| ID | Phase 4 manual case | Pass/Fail/Blocked/Not Tested | Evidence / issue / retest |
 | --- | --- | --- | --- |
 | P4-1 | Online registry, resource metrics, timestamps and Swagger schemas | | |
 | P4-2 | Heartbeat continuity during dummy and image work | | |
@@ -497,7 +511,7 @@ With MAX_TASK_ATTEMPTS=3 expect exactly three assignments, retry/retry/failed hi
 - For LAN, use the existing two-laptop setup with master `--host 0.0.0.0`, the actual LAN MASTER_URL and unique IDs. Compare static/adaptive decisions with recorded metrics, stop the remote worker during work, observe reassignment locally, restart remotely and download the result. Do not copy input files onto the remote worker. No LAN pass is claimed.
 - Clear private token variables after tests. Do not commit secrets, test images or outputs.
 
-| ID | Phase 5 manual case (NOT YET EXECUTED) | Pass/Fail/Blocked | Evidence / retest |
+| ID | Phase 5 manual case (NOT YET EXECUTED) | Pass/Fail/Blocked/Not Tested | Evidence / retest |
 | --- | --- | --- | --- |
 | P5-1 | Static baseline preserved and mode/configuration API correct | | |
 | P5-2 | Adaptive low/high CPU/RAM selection with synthetic metrics | | |
@@ -604,7 +618,7 @@ On laptop 2 open http://192.168.1.10:5173 and run its worker with MASTER_URL=htt
 
 Upload through the dashboard, observe both workers, interrupt/restart the remote worker and download completed output. No shared input directory should be needed. Capture devices/IPs, browser console/network evidence and task/attempt IDs. Do not claim LAN pass until actually executed. Stop exposed dev services afterward and return local binding to loopback.
 
-| ID | Phase 6 manual case | Pass/Fail/Blocked | Evidence / retest |
+| ID | Phase 6 manual case | Pass/Fail/Blocked/Not Tested | Evidence / retest |
 | --- | --- | --- | --- |
 | P6-1 | Empty/loading/error/retained-snapshot states; real counts | | |
 | P6-2 | Multi-upload and all operation parameters/validation | | |
@@ -728,7 +742,7 @@ Create metadata with distinct physical_device labels and accurate network detail
 | WinError 10013 | Earlier socket restriction remains open; ASGI unit tests are not live benchmark passes |
 | npm development audit findings | Rechecked: 1 moderate/2 critical; compatible upgrade attempt still blocked by DNS, not fixed |
 
-| ID | Phase 7 manual/experiment case | Pass/Fail/Blocked | Evidence / retest |
+| ID | Phase 7 manual/experiment case | Pass/Fail/Blocked/Not Tested | Evidence / retest |
 | --- | --- | --- | --- |
 | P7-1 | Seeded workloads, hashes/provenance and actual metadata | | |
 | P7-2 | Single online-worker baseline, warmup plus >=3 trials | | |
@@ -739,3 +753,73 @@ Create metadata with distinct physical_device labels and accurate network detail
 | P7-7 | Fault/retry/partial trials retained and comparisons invalidated | | |
 | P7-8 | Contamination, cancellation and timeout safety | | |
 | P7-LAN | Separate two-physical-laptop experiment with evidence | | |
+
+## 12. Phase 8 final localhost/LAN handoff — NOT YET EXECUTED manually
+
+### P8-1: prerequisites, installation and safe configuration
+
+Objective: teammate Windows 10/11 CMD can install/run without username-specific edits. Prerequisites: source at a known revision, Python 3.13 baseline, Node >=22.14, npm/Git and package-index access. Open CMD in the repository:
+
+```bat
+python --version
+node --version
+npm --version
+git --version
+scripts\setup.cmd
+if not exist master\.env copy master\.env.example master\.env
+if not exist worker\.env copy worker\.env.example worker\.env
+if not exist frontend\.env copy frontend\.env.example frontend\.env
+scripts\start_master.cmd --check
+scripts\start_worker.cmd --check
+scripts\start_frontend.cmd --check
+scripts\test_all.cmd
+```
+
+Expected: setup preserves configuration, creates missing separate environments, installs requirements/npm lockfile and changes no firewall settings. --check prints a command/status without starting services. Full verification exits 0 only when all stages pass, saving outputs/verification/UUID/results.json and UTF-8 logs. Check `echo %ERRORLEVEL%` immediately. Interrupted runs are not full passes. Capture versions, revision and verification UUID. Implementation-time checks against installed dependencies do not certify a clean-machine network install.
+
+Environment files are simple KEY=value data, optional matching quotes and whole-line # comments. No shell evaluation, expansion or inline comments; terminal set values override files. Direct uvicorn/worker.py commands do not load the wrapper files. Actual .env files are ignored, examples contain no secrets, and dynamically issued tokens must never go in configuration/screenshots.
+
+### P8-2: complete localhost integration
+
+Objective: whole application works over real TCP/browser. Prerequisites: target setup, no unrelated project processes, real nonprivate JPG/PNG inputs. Four terminals: A runs scripts/start_master.cmd; B and C run scripts/start_worker.cmd after setting distinct WORKER_ID values; D runs scripts/start_frontend.cmd.
+
+```bat
+set "WORKER_ID=handoff-1"
+scripts\start_worker.cmd
+```
+
+Use handoff-2 in C. Expected URLs: localhost:8000/health, /docs and dashboard http://127.0.0.1:5173. Follow Phases 1–6 cases: registration/metrics, all image operations, task progress/history/results, interruption/reassignment, stale result rejection and WS/poll reconnect. Current modern requests require private session and generation headers; use only local variables for those exercises. Legacy Phase 1-3 manual cases remain static first-attempt compatibility checks with the documented longer timeout.
+
+Expected evidence: actual IDs, one task/image, valid PNG dimensions, updated metrics, bounded retries, real dashboard snapshots without credentials/local-file URLs. Screenshot desktop/mobile, Swagger and histories; do not expose tokens/private photos. API worker IDs containing separators now poll through path-aware routes, although simple unique IDs remain recommended for normal use.
+
+### P8-3: complete two-laptop integration
+
+Use TWO_LAPTOP_SETUP.md as the authoritative command list: A master/frontend/worker A, B worker B, actual IPv4 and explicit CORS/Vite URLs. Required inbound ports are 8000 on A and optional 5173 only for remote dashboard access; B workers need no inbound port. Check B health/registration, metrics, remote image byte transfer without shared files, interruption/reassignment/reconnect and valid result download. Check browser Console/Network/WS separately from curl/Swagger. Record physical device/network evidence in the execution template. All LAN cases remain pending until actually performed.
+
+### P8-4: benchmark/demo/evidence package
+
+Run Phase 7 experiments only after connectivity passes, using isolated modes, identical workload/metadata, warmup and >=3 measured trials. Retain failures and raw outputs. Helper commands:
+
+```bat
+scripts\benchmark_prepare.cmd --directory benchmarks\workloads\handoff-small --profile small --seed 42
+scripts\benchmark_run.cmd --help
+scripts\benchmark_report.cmd --source benchmarks\results --output benchmarks\reports\handoff-01
+```
+
+The report needs actual saved run files; an empty graph is not a measurement. Follow phase7.md for full run arguments. DEMO_GUIDE.md is a proposed 10–15 minute sequence, not an executed demo. Complete FINAL_CHECKLIST.md acceptance items only with evidence, defect IDs and retests. Preserve meaningful logs; do not commit generated datasets/reports or secrets.
+
+### P8-5: safe diagnostics and known security limits
+
+Run `python scripts/diagnose_network.py`, ipconfig, netstat and read-only Test-NetConnection from TWO_LAPTOP_SETUP.md. Record binds, connects, socketpair and DNS separately. Actual implementation probes passed ephemeral/8000/5173 binds, failed ephemeral connect with 10013, bounded socketpair to four seconds and failed DNS. Exact policy cause remains unknown; administrator review may be needed if a normal user CMD reproduces it. Do not disable firewall/antivirus or kill unrelated PIDs to force a pass.
+
+Run npm audit and npm audit --omit=dev separately. Full dev audit currently has 1 moderate/2 critical findings; production-only reports zero. Compatible update was DNS-blocked; no forced upgrade is justified without compatibility/tests/build checks. In-memory reset, no authenticated enrollment/TLS, no quotas, structural output checks and best-effort HTTP deadlines remain documented limits, not hidden production guarantees.
+
+| ID | Objective/procedure above | Pass/Fail/Blocked/Not Tested | Evidence / defect / retest |
+| --- | --- | --- | --- |
+| P8-1 | Fresh install, configuration precedence and relative scripts | | |
+| P8-2 | Full localhost HTTP/browser/image/recovery integration | | |
+| P8-3 | Full two-physical-laptop LAN integration | | |
+| P8-4 | Benchmark/demo/report/evidence handoff | | |
+| P8-5 | Read-only socket diagnosis, audit and security review | | |
+
+No teammate case is marked Pass. Automated/programmatic checks and manual acceptance are separate categories. Append actual results to TEST_RESULTS.md only after execution, with the template and evidence links.

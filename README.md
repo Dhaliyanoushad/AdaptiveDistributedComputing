@@ -1,194 +1,118 @@
 # Adaptive Distributed Computing Framework for Heterogeneous Devices
 
-Final-year project exploring how heterogeneous devices can share computing work through a central coordinator. Phase 3 adds distributed JPG/PNG processing over HTTP to the existing registration, dummy-task queue and static round-robin assignment. See [Phase 3 setup and testing](docs/phase3.md).
+Final-year project coordinating Python workers through a FastAPI master to process images across heterogeneous devices. Phases 1–8 implement communication, image tasks, monitoring, static/adaptive scheduling, bounded recovery, a React dashboard, benchmark tools and a documented handoff. **Implementation completion is not manual validation:** browser, LAN and actual performance experiments remain pending.
 
-Phase 4 adds CPU/RAM monitoring, independent heartbeats, online/offline detection and session-protected reconnection. See [the Phase 4 manual cases](docs/TESTING_GUIDE.md#8-phase-4-resource-monitoring-and-heartbeats--not-yet-executed), [automated suites](docs/AUTOMATED_TESTS.md) and [actual results](docs/TEST_RESULTS.md).
+## Documentation entry points
 
-Phase 5 adds selectable rule-based adaptive scheduling and bounded fault recovery. [Phase 5 policy and configuration](docs/phase5.md) supersedes historical statements below that task recovery is unavailable. Static remains the default. New assignments have generation tokens; updated workers send them automatically. No adaptive speedup is claimed.
+- [Manual testing guide](docs/TESTING_GUIDE.md) and [execution template](docs/TEST_EXECUTION_TEMPLATE.md)
+- [Two-laptop setup](docs/TWO_LAPTOP_SETUP.md)
+- [Architecture](docs/ARCHITECTURE.md), [API reference](docs/API_REFERENCE.md)
+- [Automated suites](docs/AUTOMATED_TESTS.md), [actual results](docs/TEST_RESULTS.md)
+- [Demo sequence](docs/DEMO_GUIDE.md), [final checklist](docs/FINAL_CHECKLIST.md)
 
-To select a mode, set `SCHEDULER_MODE=static` or `SCHEDULER_MODE=adaptive` in the master CMD before startup. `MAX_TASK_ATTEMPTS` defaults to 3. Inspect `GET /scheduler` and `/tasks/{task_id}/attempts` to review decisions and retries. Recoverable modern-worker tasks are now requeued after heartbeat timeout; permanent failures and exhausted attempts become terminal. Legacy clients cannot receive retries. All metadata still disappears on master restart. See the Phase 5 guide for all weight/freshness/fairness defaults and the updated teammate guide for exact commands.
+## Components and features
 
-## Planned architecture
+`master/` owns the locked in-memory registry, FIFO, scheduler, attempts and result validation. `worker/` sends independent psutil heartbeats, polls fenced assignments, downloads image bytes, runs OpenCV and uploads PNGs. `frontend/` displays public data through read-only WebSockets with polling fallback. `benchmarks/` runs isolated real-image HTTP trials and exports recorded observations; it never changes master mode or fabricates results.
 
-Phase 7 adds a standalone reproducible benchmarking workflow without changing the runtime APIs or dashboard. See [methodology and interpretation](docs/phase7.md) and the pending teammate cases in [TESTING_GUIDE.md](docs/TESTING_GUIDE.md).
+Operations: grayscale, exact resize, Gaussian blur and Canny edges. JPG/PNG inputs become PNG outputs with unique server-generated filenames. Dummy tasks remain for tests. Modern session and assignment tokens prevent stale result publication. Static mode is default; adaptive mode uses configurable resource scores and fairness without ML. Timeout/transient failures retry within MAX_TASK_ATTEMPTS (default 3). Old results cannot overwrite accepted output.
 
-Quick setup (CMD, repository root):
+Stack: Python 3.13, FastAPI/Uvicorn/Pydantic, requests, psutil, OpenCV-headless/Pillow/NumPy, HTTP/WS, React/Vite/TypeScript/Tailwind. No database, broker, ML, Spark or Kubernetes. One master process only; restart loses all metadata, queue, history and credentials. Disk files remain but are not rediscovered.
+
+## Windows 10/11 installation — CMD
+
+Open Command Prompt in the repository (Explorer address bar: type cmd). All commands are relative to the repository, not a specific username.
 
 ```bat
-worker\.venv\Scripts\python.exe -m benchmarks.workload --directory benchmarks\workloads\small-42 --profile small --seed 42
+python --version
+node --version
+npm --version
+git --version
+scripts\setup.cmd
+```
+
+Tested baseline: Python 3.13.2, Node 22.14.0, npm 11.12.0, Git 2.46.0. Setup requires Python 3.13 and Node >=22.14. It creates missing separate virtual environments, installs each requirements.txt and runs npm ci against the frontend lockfile. Fresh installation requires package-index access. It never replaces existing .env configuration, changes firewall settings or installs services. Address the first setup error before running the application.
+
+Optional configuration:
+
+```bat
+if not exist master\.env copy master\.env.example master\.env
+if not exist worker\.env copy worker\.env.example worker\.env
+if not exist frontend\.env copy frontend\.env.example frontend\.env
+```
+
+Wrappers load simple KEY=value configuration as inert data, with existing terminal variables taking precedence. No shell evaluation/interpolation is performed. Direct uvicorn/worker.py commands do not automatically load .env files. Vite variables are public; never store credentials in them. Session/attempt tokens are generated dynamically, not configured in files.
+
+## Local startup — four separate CMD terminals
+
+Master:
+
+```bat
+scripts\start_master.cmd
+```
+
+Worker 1:
+
+```bat
+set "WORKER_ID=worker-1"
+scripts\start_worker.cmd
+```
+
+Worker 2:
+
+```bat
+set "WORKER_ID=worker-2"
+scripts\start_worker.cmd
+```
+
+Frontend:
+
+```bat
+scripts\start_frontend.cmd
+```
+
+Open http://127.0.0.1:5173 (dashboard), http://127.0.0.1:8000/docs (Swagger), http://127.0.0.1:8000/health. Wrappers resolve their repository directory even when invoked from elsewhere. Each accepts --check for non-serving path/host/port/URL checks and --env-file for an explicit alternate file. Full application parameter validation still occurs at startup; --check is not a service readiness test. Stop owned processes with Ctrl+C, workers before master. Never use multiple master processes or reload with this in-memory registry.
+
+Upload images in the dashboard, choose operation/parameters, track returned task IDs and inspect history/results. Upload success means queued, not completed. The browser never holds worker tokens; original inputs remain restricted to assigned workers. API limits: 1–20 files/batch, 10 MiB each, 4096 pixels/side, 16 million pixels. See API reference for exact schemas.
+
+## Configuration and LAN
+
+Set SCHEDULER_MODE=adaptive in the master terminal before startup to change from static round-robin. No runtime mode toggle exists. [phase5.md](docs/phase5.md) describes scores, weights, fallback and fairness. Default worker heartbeats wait 3 seconds with 2-second connect/read timeouts; master timeout is 10 seconds with 1-second checks. Task HTTP timeouts remain connect 3.05/read 10 seconds. Worker defaults: MASTER_URL=http://127.0.0.1:8000, WORKER_ID=hostname, POLL_INTERVAL=1, TASK_DELAY=.5 for dummy tasks only.
+
+For LAN, set MASTER_HOST=0.0.0.0 on Laptop A and actual MASTER_URL=http://LAPTOP_A_IPV4:8000 on Laptop B. Set VITE_MASTER_URL and CORS_ALLOWED_ORIGINS to the actual reachable API and browser origin. Required ports are 8000 (master HTTP/WS) and 5173 (dashboard dev server). Permit only intended apps/ports on a trusted Private network. Never disable the firewall automatically or expose this prototype publicly. [TWO_LAPTOP_SETUP.md](docs/TWO_LAPTOP_SETUP.md) has exact commands and troubleshooting.
+
+## Automated verification
+
+```bat
+scripts\test_all.cmd
+```
+
+Runs every master/worker/benchmark/frontend/setup suite, production build, dependency and launcher checks. It continues after stage failures, returns nonzero on any failure and retains logs under ignored outputs/verification/UUID/. It uses the existing socket-free master ASGI runner: a pass is not live TCP/browser/LAN validation. [TEST_RESULTS.md](docs/TEST_RESULTS.md) contains actual observed counts. Review logs before sharing; do not commit private data.
+
+## Benchmarking
+
+```bat
+scripts\benchmark_prepare.cmd --directory benchmarks\workloads\small-42 --profile small --seed 42
 copy benchmarks\environment.example.json benchmarks\environment.json
 ```
 
-Edit the copied metadata with actual hardware/network details. With a fresh static master and exactly one online worker named bench-1:
+Fill all metadata placeholders. With an isolated static master and exactly one online worker bench-1:
 
 ```bat
 worker\.venv\Scripts\python.exe -m benchmarks.runner --mode single --workers bench-1 --workload benchmarks\workloads\small-42 --operation grayscale --environment benchmarks\environment.json --trials 3 --warmups 1
 ```
 
-Restart the isolated master/workers for static and adaptive runs with the same distributed pool. The CLI validates mode/topology; it never changes scheduler configuration or stops workers. Generate reports after collecting modes:
+Restart isolated master/workers for static/adaptive modes with the same two-worker pool, workload and metadata. Generate reports:
 
 ```bat
-worker\.venv\Scripts\python.exe -m benchmarks.report --source benchmarks\results --output benchmarks\reports\experiment-01
-worker\.venv\Scripts\python.exe -m unittest discover -s tests -p test_benchmarks.py -v
+scripts\benchmark_report.cmd --source benchmarks\results --output benchmarks\reports\experiment-01
 ```
 
-Outputs are ignored JSON/CSV/Markdown/SVG artifacts. No actual benchmark performance result or speedup is claimed from automated tests. Frontend development audit findings and earlier WinError 10013 verification limits remain open; see TEST_RESULTS.md.
+[phase7.md](docs/phase7.md) defines timing/throughput/speedup/efficiency, warmups and invalid trials. Generated datasets/reports are ignored. No actual performance experiment or speedup is claimed during implementation.
 
-- **Master:** Python and FastAPI; HTTP worker registration, task inspection, an in-memory FIFO queue and static round-robin assignment. WebSockets remain future work.
-- **Workers:** Python, requests, psutil and OpenCV for future device reporting and image tasks.
-- **Frontend:** React, Vite and Tailwind CSS, to be initialized during the dashboard phase.
-- **Communication:** HTTP and WebSockets, to be implemented incrementally.
-- **Storage:** No database initially. No machine learning initially.
+## Limitations and open issues
 
-OpenCV uses the headless distribution because workers do not initially need desktop display windows. It provides the `cv2` import; do not install it alongside another OpenCV distribution in the same environment.
-
-## Project layout
-
-```text
-master/       Master dependencies and future coordinator code
-worker/       Worker dependencies and future device code
-frontend/     Reserved for React + Vite + Tailwind
-tests/        Master endpoint and worker client tests
-docs/         Design notes and environment verification
-test_images/  Local input images (ignored by Git)
-outputs/      Generated results (ignored by Git)
-```
-
-## Windows setup
-
-Run from the repository root using Python 3.13:
-
-```powershell
-python -m venv master/.venv
-python -m venv worker/.venv
-& .\master\.venv\Scripts\python.exe -m pip install -r master/requirements.txt
-& .\worker\.venv\Scripts\python.exe -m pip install -r worker/requirements.txt
-```
-
-Activate one environment per terminal:
-
-```powershell
-# Master terminal
-.\master\.venv\Scripts\Activate.ps1
-
-# Worker terminal (separate terminal)
-.\worker\.venv\Scripts\Activate.ps1
-```
-
-Run `deactivate` to leave an environment. If PowerShell blocks activation, use the environment's Python executable directly as above; activation is optional. In Command Prompt use `master\.venv\Scripts\activate.bat` or `worker\.venv\Scripts\activate.bat`.
-
-Dependency files specify bounded version ranges; they are not reproducible lockfiles. See `docs/environment-checks.md` for the actual installation and verification results from initialization.
-
-## Planned development phases
-
-1. **Foundation (complete):** directory scaffold, isolated environments, dependencies, conventions and environment checks.
-2. **Phase 1 — Connectivity (implemented):** minimal master HTTP API and worker registration. WebSockets remain future work.
-3. **Phase 2 - Tasks and static distribution (implemented):** in-memory dummy-task registry/queue, round-robin assignment, polling and task-state updates.
-4. **Phase 3 - Distributed image processing (implemented):** grayscale, resize, Gaussian blur and edge detection; input/result HTTP byte transfers. Liveness and recovery remain future work.
-5. **Scheduling:** start with a simple baseline, then adapt allocation using device capability and load; compare against the baseline.
-6. **Dashboard:** initialize React + Vite + Tailwind and expose system state through a minimal UI.
-7. **Evaluation:** heterogeneous-device experiments, failure tests, performance measurements and final documentation.
-
-Static/adaptive scheduling, bounded task recovery and the local React dashboard are implemented. No database or machine learning was added.
-
-## Phase 6 dashboard
-
-The React/Vite/TypeScript/Tailwind dashboard is implemented locally. It displays actual API data for overview, uploads, workers, task history, completed results and scheduling. This section supersedes historical roadmap statements above that the frontend is future work. No benchmarking or Phase 7 features were added.
-
-Install and start from Windows CMD:
-
-```bat
-cd /d C:\Users\daliy\Desktop\AdaptiveDistributedComputing\frontend
-npm install
-set "VITE_MASTER_URL=http://127.0.0.1:8000"
-npm run dev
-```
-
-Open `http://127.0.0.1:5173`. Start the master and workers in separate terminals using the existing commands below. The dev server binds to loopback and requires port 5173 rather than silently changing ports. `frontend/.env.example` documents the optional Vite setting; `.env` is ignored. Vite variables are public build configuration, never secrets.
-
-The master defaults `CORS_ALLOWED_ORIGINS` to `http://127.0.0.1:5173,http://localhost:5173`. Override with a comma-separated explicit HTTP(S) origin list before master startup; wildcards, paths and credentials are rejected. The same origin policy protects `WS /ws/dashboard`. Snapshots include only public workers/tasks/scheduler data, sent on changes with approximately two-second checks; task processing never waits for clients. The frontend initially fetches existing endpoints, reconnects WebSockets with 1/2/4/8/16/30-second backoff and polls every five seconds while disconnected. Failed refreshes retain the last snapshot with an error notice. There is no runtime scheduling-mode toggle.
-
-Verification commands (frontend directory):
-
-```bat
-npm test
-npm run build
-npm audit
-```
-
-Tests and build are recorded in [TEST_RESULTS.md](docs/TEST_RESULTS.md). **Unresolved development-tool audit findings:** the installed Vitest dependency tree reports 1 moderate and 2 critical advisories. A patched-version upgrade attempt failed with npm registry DNS `ENOTFOUND`; it was not applied. Review/update compatible test tooling and rerun tests/build/audit when registry access is available. Do not expose test tooling on a public network. Detailed local/LAN/manual cases are in [TESTING_GUIDE.md](docs/TESTING_GUIDE.md).
-
-## Run the master and workers on Windows CMD
-
-Open two Command Prompt terminals. These commands use each existing virtual environment directly; activation is optional.
-
-Terminal 1 — master:
-
-```bat
-cd /d C:\Users\daliy\Desktop\AdaptiveDistributedComputing
-master\.venv\Scripts\python.exe -m uvicorn master.main:app --host 127.0.0.1 --port 8000
-```
-
-Terminal 2 — worker:
-
-```bat
-cd /d C:\Users\daliy\Desktop\AdaptiveDistributedComputing
-set "MASTER_URL=http://127.0.0.1:8000"
-set "WORKER_ID=local-worker-1"
-worker\.venv\Scripts\python.exe worker\worker.py
-echo %ERRORLEVEL%
-```
-
-The worker prints its registration result and stays running to poll and process tasks. Press Ctrl+C to stop it (exit 0); registration or task communication failure exits 1. Task requests have a 3.05-second connection timeout and a 10-second read timeout. Heartbeats use their own thread and timeout settings below. There is no task retry. Without environment variables, `MASTER_URL` defaults to `http://127.0.0.1:8000` and `WORKER_ID` defaults to the local hostname. `.env` files are not loaded automatically. `POLL_INTERVAL` defaults to 1 second; `TASK_DELAY` defaults to 0.5 seconds.
-
-Terminal 3 - second worker (keep terminal 2 running):
-
-```bat
-cd /d C:\Users\daliy\Desktop\AdaptiveDistributedComputing
-set "MASTER_URL=http://127.0.0.1:8000"
-set "WORKER_ID=local-worker-2"
-set "POLL_INTERVAL=1"
-set "TASK_DELAY=3"
-worker\.venv\Scripts\python.exe worker\worker.py
-```
-
-Use a unique ID for every worker process. For a reproducible equal-delay demonstration, also set `TASK_DELAY=3` in terminal 2 before launching that worker. Open `/docs`, submit a batch through **POST /tasks**, then inspect **GET /tasks**. See [the Phase 2 guide](docs/phase2.md) for exact request bodies, CMD submission commands and manual state/ownership checks.
-
-Verify in a browser at `http://127.0.0.1:8000/workers`, or use CMD:
-
-```bat
-curl.exe http://127.0.0.1:8000/health
-curl.exe http://127.0.0.1:8000/workers
-```
-
-Open `http://127.0.0.1:8000/docs` for Swagger UI. Expand **GET /workers**, select **Try it out**, then **Execute** to see the registry. To register through Swagger, use **POST /workers/register** with a new worker ID. See [the Phase 1 guide](docs/phase1.md) for the request contract and a later two-laptop test.
-
-All worker/task state resets when the master restarts. Run a single Uvicorn process without `--workers` or `--reload`; separate processes have separate dictionaries. Reusing an online ID returns HTTP 409. Updated workers can reconnect after offline detection and receive a new session token. Legacy registrations cannot reconnect. An old assigned/running task is not recovered or transferred to the new session and keeps that worker ID busy. Stopped workers remain listed with offline status.
-
-## Phase 4 configuration
-
-Run commands remain the same. Set these in CMD before starting the corresponding process:
-
-| Process | Variable | Default | Meaning |
-| --- | --- | --- | --- |
-| Master | `WORKER_TIMEOUT` | `10` | Seconds since last heartbeat receipt before offline (strictly greater than timeout) |
-| Master | `TIMEOUT_CHECK_INTERVAL` | `1` | Background timeout sweep seconds |
-| Worker | `HEARTBEAT_INTERVAL` | `3` | Seconds between heartbeat attempts after each request finishes |
-| Worker | `HEARTBEAT_HTTP_TIMEOUT` | `2` | Connect/read timeout seconds for heartbeat HTTP calls |
-| Worker | `MASTER_URL` | `http://127.0.0.1:8000` | Master base URL |
-| Worker | `WORKER_ID` | local hostname | Unique worker identity |
-| Worker | `POLL_INTERVAL` | `1` | Idle task polling delay seconds |
-| Worker | `TASK_DELAY` | `0.5` | Dummy-task simulation seconds; not an image-processing delay |
-
-All intervals/timeouts must be finite and positive; TASK_DELAY may be zero. Existing task HTTP timeouts remain fixed at connect 3.05/read 10 seconds. Configure WORKER_TIMEOUT comfortably above heartbeat interval plus network latency; a too-small timeout can cause false offline detection. A lifecycle background task expires workers without GET requests. A separate worker thread samples psutil with nonblocking CPU reads and sends heartbeats while tasks run. Unavailable metrics are null. Available RAM is reported in MiB (1024² bytes), under the API field `available_ram_mb`.
-
-`GET /workers` now adds `last_seen`, `status`, `cpu_percent`, `ram_percent` and `available_ram_mb` while keeping worker_id/hostname and the array shape. `GET /workers/{worker_id}` returns one record. `POST /workers/heartbeat` accepts those metrics and worker_id; optional client timestamp is informational, never the timeout authority. Session-aware registrations send `X-Worker-Protocol: session-v1` and receive a private `X-Worker-Session` response header. Updated workers attach it to heartbeat, polling, task updates and image transfers automatically. Do not log or commit the token. Missing/stale token returns 401, unknown worker 404, offline/session-task conflict 409, invalid body 422. This is session fencing, not authenticated enrollment: legacy registrations retain the original trusted-network assumptions, cannot be upgraded/reconnected, and time out if they do not heartbeat. No automatic reconnect loop, retry or task recovery is implemented.
-
-## Run automated tests (CMD)
-
-```bat
-master\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_master*.py" -v
-worker\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_worker*.py" -v
-```
-
-The environments remain separate. Master tests use the ASGI interface and Python's standard library; worker tests mock HTTP requests. No additional test dependencies are required.
+- Socket diagnostics: loopback bind/listen succeeded on ephemeral/8000/5173, but ephemeral connect failed WinError 10013; socketpair stalled and DNS failed. This points to execution-context restrictions, not a conflict on application ports. Exact policy/product cause is undetermined. Run python scripts\diagnose_network.py; no system security settings were changed.
+- Full npm audit still reports 1 moderate and 2 critical development-tool findings. Production-only audit reports zero. Compatible Vitest update attempts are blocked by registry DNS ENOTFOUND. Update and rerun tests/build/audit with network access; do not blindly force upgrades.
+- Trusted-LAN prototype: no authenticated enrollment/TLS, persistence, storage quotas or retention service. Legacy static workers cannot reconnect or receive secure retries. Structural output validation is not proof of work by an untrusted worker. No independent deadline exists for a heartbeating-but-hung task.
+- Multipart parsing can spool uploads before endpoint limits. Whole-host metrics/history and UI polling are not performance proof. OS/DNS stalls can exceed nominal HTTP timeouts.
+- Manual/real-browser/LAN/performance acceptance remains for the teammate. Phase 8 completes implementation/handoff, not manual validation. There is no separate phase4.md; its implementation records remain in the testing documents and Git history.

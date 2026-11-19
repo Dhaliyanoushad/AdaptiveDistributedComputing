@@ -70,7 +70,7 @@ def create_app(*, input_dir: Path | None = None, output_dir: Path | None = None,
     async def list_workers() -> list[WorkerRecord]:
         return store.list_workers()
 
-    @application.get("/workers/{worker_id}", responses={404: {"description": "Unknown worker"}})
+    @application.get("/workers/{worker_id:path}", responses={404: {"description": "Unknown worker"}})
     async def get_worker(worker_id: str) -> WorkerRecord:
         return store.get_worker(worker_id)
 
@@ -99,7 +99,7 @@ def create_app(*, input_dir: Path | None = None, output_dir: Path | None = None,
     async def get_task(task_id: str) -> Task:
         return store.get_task(task_id)
 
-    @application.post("/workers/{worker_id}/next-task",
+    @application.post("/workers/{worker_id:path}/next-task",
                       responses={401: {"description": "Missing or stale worker session"},
                                  409: {"description": "Worker offline or task belongs to an old session"},
                                  404: {"description": "Worker not registered"}})

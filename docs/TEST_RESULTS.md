@@ -1,5 +1,50 @@
 # Test results
 
+## Phase 8 final verification — 2026-11-19
+
+Actual one-command execution: `cmd.exe /d /c scripts\test_all.cmd` returned **0** after all eleven stages completed. Retained local evidence: `outputs/verification/817a5e54-1b48-4c69-a60f-c4d63c270d78/results.json` and per-stage UTF-8 logs (ignored, not committed).
+
+| Suite | Passed | Failed | Errors | Skipped | Actual result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Master regression + final HTTP contracts | 80 | 0 | 0 | 0 | OK; 5.516 seconds |
+| Worker regression | 32 | 0 | 0 | 0 | OK; 0.311 seconds |
+| Benchmark tests | 24 | 0 | 0 | 0 | OK; 0.542 seconds |
+| Setup/config/script tests | 7 | 0 | 0 | 0 | OK; 0.022 seconds |
+| Frontend component/API/live-update tests | 30 | 0 | 0 | 0 | Four files passed; 6.12 seconds |
+| **Unique methods in final run** | **173** | **0** | **0** | **0** | Earlier phase functionality retained |
+
+Other stages actually passed: frontend TypeScript/Vite production build (2.61 seconds bundling), master and worker pip check (no broken requirements), master/worker/frontend launcher --check (non-serving). Direct CMD startup --check wrappers and workload/report/runner --help wrappers also passed. scripts/setup.cmd was reviewed but **not executed as a clean installation**, because environments/dependencies already exist and package-index access is restricted. Real service startup/shutdown through the new wrappers is not claimed by configuration checks.
+
+Introduced/fixed issues and retained run history:
+
+- First final-contract master run: 80 methods, 79 passed and 1 failure. A worker_id containing '/' registered but could not poll (404). Worker detail/polling routes now use path-aware parameters; the regression passes. Session/ownership checks were preserved; scheduling/recovery algorithms did not change.
+- First unified run passed Python stages, then the new verification wrapper raised UnicodeEncodeError while printing Vitest checkmarks under Windows CP1252. Its partial UTF-8 logs remain in outputs/verification; it was not a full verification pass. Added console escaping and incremental JSON evidence saving, plus a regression test.
+- Final unified rerun above passed all stages. No interrupted-run logs were deleted or represented as completed evidence.
+
+## Phase 8 safe network investigation — observed, not remediated
+
+Executed `master\.venv\Scripts\python.exe scripts\diagnose_network.py` and a read-only Get-NetTCPConnection filter for ports 8000/5173:
+
+| Probe | Actual observation |
+| --- | --- |
+| Ephemeral 127.0.0.1 bind/listen | Passed |
+| 127.0.0.1:8000 bind/listen | Passed; socket closed afterward |
+| 127.0.0.1:5173 bind/listen | Passed; socket closed afterward |
+| Connect to owned ephemeral loopback listener | Failed: WinError 10013 / errno 13 |
+| socket.socketpair child | Blocked beyond 4 seconds; only owned diagnostic child terminated |
+| registry.npmjs.org getaddrinfo child | Failed: socket.gaierror 11001 |
+| Application-port listener query after probes | No matching listener rows returned in this context |
+
+This supports an execution-context/security restriction on socket connections, not an application port conflict at that observation. It does **not** identify a specific firewall/antivirus policy or prove unrestricted behavior under the user's normal terminal. No firewall, antivirus, registry, network profile or system-wide policy was changed. Exact commands and safe target-machine remediation options are in TWO_LAPTOP_SETUP.md. Previous browser/TCP/LAN blocks are not marked resolved.
+
+## Phase 8 security audit and handoff status
+
+Rechecked full `npm audit --json`: still **1 moderate and 2 critical development-tool findings** (exit 1). `npm audit --omit=dev`: **0 production findings** (exit 0). Retried compatible `npm install --save-dev vitest@4.1.12 --fetch-retries=0 --fetch-timeout=20000`: failed ENOTFOUND; no forced upgrade or package-tree change. Full security audit remains unresolved despite passing tests/build.
+
+Tracked-file review found source/docs/placeholders, not virtual environments, node_modules, uploaded/generated datasets, actual .env secrets or output evidence. `git check-ignore` confirmed the intended exclusions for all components, benchmark data and verification outputs. A targeted secret-pattern source scan found no matching private-key/password/token assignments; this is a limited review, not a formal secret/security audit. Private credential exclusion is separately tested in public snapshots/HTTP contracts. Meaningful evidence was preserved; no unrelated files were removed.
+
+Manual acceptance: **not yet executed by teammate**. No fresh-machine installation, successful live browser/TCP startup, two-laptop LAN test or real performance experiment was completed during Phase 8. Existing ASGI/processor integration and mocked frontend tests are automated evidence only. The code/docs/scripts are ready to hand off for target-machine manual testing, subject to socket/package-access limitations and development advisories. No manual validation certificate, production-readiness claim or additional phase is implied.
+
 ## Phase 7 verification — 2026-11-19
 
 | Actual command | Passed | Failed | Errors | Skipped | Observed result |

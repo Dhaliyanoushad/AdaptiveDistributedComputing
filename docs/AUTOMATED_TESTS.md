@@ -1,4 +1,16 @@
-# Automated tests: Phases 1-7
+# Automated tests: Phases 1-8
+
+## One-command final verification
+
+```bat
+scripts\test_all.cmd
+```
+
+From repository CMD this wrapper invokes scripts/verify.py in the master environment, runs every suite, frontend build, both pip checks and three non-serving launcher checks. It continues after stage failure, returns nonzero if any failed, and retains UTF-8 logs and incremental/final results.json in ignored outputs/verification/UUID/. Console output escapes unsupported characters on older Windows encodings; raw logs preserve Unicode. Interrupted evidence has complete=false when a stage record exists; never treat it as a full pass. Installation is separate via scripts/setup.cmd; a clean-machine network installation was not rerun during handoff.
+
+New tests/test_master_integration.py has 4 HTTP/schema/header/public-data contracts and is included by master discovery. New tests/test_integration_setup.py has 7 configuration/CMD/verification tests and is a separate stage. Current counts: 80 master, 32 worker, 24 benchmark, 30 frontend, 7 setup = **173 unique methods**. Earlier inventory rows describe historical phase counts.
+
+The encoded worker-ID polling test first reproduced a genuine 404, then verified the path-aware route fix. No scheduler/recovery algorithm changed. Actual CMD --check wrappers and benchmark --help wrappers were executed without starting services. Read-only socket probes are diagnostics, not live TCP/browser passes. See TEST_RESULTS.md for the final run and open issues.
 
 This is the inventory and execution guide, not a test result record. See [TEST_RESULTS.md](TEST_RESULTS.md) for observed runs and [TESTING_GUIDE.md](TESTING_GUIDE.md) for the teammate's pending manual checks.
 

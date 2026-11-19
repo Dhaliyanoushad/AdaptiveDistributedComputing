@@ -61,3 +61,10 @@
 - Permit the standalone real-image HTTP benchmark client, seeded workloads, raw JSON/CSV and measured-data reports/SVGs. Do not modify startup-only scheduling through the benchmark client or bypass worker/session/assignment protection.
 - Refuse contaminated topology/task setups, retain invalid/warmup/fault observations and require matched valid repeated trials before speedup/efficiency. Never publish mock test fixtures as experimental results or claim improvement without measurements.
 - Keep generated datasets/results/reports/environment observations ignored. Preserve all phase regression commands and testing documents. No database, benchmarking UI, deployment framework or Phase 8.
+
+## Phase 8 final handoff
+
+- Permit final contract fixes, repository-relative Windows setup/start/verify/benchmark scripts and deployment/testing documentation. Preserve the in-memory architecture, credential boundaries and all regressions.
+- Use scripts/test_all.cmd for complete verification; retain actual logs under ignored outputs/verification. Distinguish interrupted/failed runs from successful reruns and never mark manual/LAN/performance validation complete without evidence.
+- Configuration is inert KEY=value data; terminal environment takes precedence. Never execute .env as shell code, overwrite user configuration, change system security/firewall policies or terminate unrelated processes.
+- README is the current entry point; historical phase records can describe superseded behavior. Current API/architecture/LAN/checklist documents must match source. No additional phase, database, ML or orchestration features.
