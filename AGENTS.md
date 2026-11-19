@@ -8,7 +8,8 @@
 - `tests/`: future unit and integration tests; `docs/`: design and experiment notes.
 - `test_images/` and `outputs/`: local data and generated artifacts, excluded from Git.
 - Do not introduce a database or machine learning without an explicit scope change.
-- Phase 2 permits HTTP health checks, worker registration/listing, an in-memory dummy-task registry/FIFO queue, static round-robin distribution and worker polling/start/completion/failure updates. Do not implement image processing, adaptive scheduling, heartbeat, fault recovery or UI without further authorization.
+- Phase 3 additionally permits JPG/PNG image uploads, HTTP input/result byte transfer, OpenCV grayscale/resize/Gaussian blur/edge detection and completed-result viewing/downloads. Preserve dummy tasks and static distribution. Do not implement adaptive scheduling, heartbeat, fault recovery or UI without further authorization.
+- Validate upload types, byte/pixel limits and parameters. Store images only in ignored uploads/ and outputs/ using server-generated names. Never send master filesystem paths to workers. Image completion must validate ownership, running status and decoded output; it cannot bypass result upload through the dummy completion endpoint.
 - Run one master process. Synchronize registry, queue, assignment and transition changes with the store lock. Registered idle workers are eligible; each may hold one active task. Preserve ownership checks and idempotent completion.
 - Worker reconnection, task redelivery and retries are not supported yet. Keep duplicate registration protection.
 
@@ -38,3 +39,4 @@
 - Verify with the relevant virtual environment's Python executable.
 - Run dependency checks after installation and focused tests when behavior is introduced.
 - Report commands run, observed results, failures and remaining manual steps honestly; never claim unrun checks passed.
+- Every future phase must include automated tests, execute the complete relevant regression suite (including earlier phases), fix introduced failures, and update `docs/TESTING_GUIDE.md`, `docs/AUTOMATED_TESTS.md` and `docs/TEST_RESULTS.md`. Record actual passed/failed counts and execution limitations; keep unperformed manual/LAN tests separate from automated results.

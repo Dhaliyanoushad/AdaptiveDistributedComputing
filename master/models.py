@@ -33,6 +33,7 @@ class TaskFailure(TaskUpdate):
 
 
 class Task(TaskInput):
+    operation: Literal["dummy", "grayscale", "resize", "gaussian_blur", "edge_detection"]
     task_id: str
     status: Literal["pending", "assigned", "running", "completed", "failed"] = "pending"
     assigned_worker: str | None = None
@@ -48,3 +49,8 @@ class Task(TaskInput):
 
 class TaskPoll(BaseModel):
     task: Task | None
+
+
+class ImageTaskInput(BaseModel):
+    operation: Literal["grayscale", "resize", "gaussian_blur", "edge_detection"]
+    payload: dict[str, JsonValue]

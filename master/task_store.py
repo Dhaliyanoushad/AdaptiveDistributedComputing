@@ -4,8 +4,10 @@ from collections import deque
 from datetime import datetime, timezone
 from threading import RLock
 from uuid import uuid4
+from pathlib import Path
 
-from master.models import Task, TaskInput, WorkerRegistration
+from master.models import ImageTaskInput, Task, TaskInput, WorkerRegistration
+from master.image_files import save_unique
 
 
 class StoreError(Exception):
@@ -24,6 +26,8 @@ class TaskStore:
         self._delivered: set[str] = set()
         self._next_worker = 0
         self._lock = RLock()
+        self.input_files: dict[str, Path] = {}
+        self.result_files: dict[str, Path] = {}
 
     def register(self, worker: WorkerRegistration) -> WorkerRegistration:
         with self._lock:
@@ -37,7 +41,7 @@ class TaskStore:
         with self._lock:
             return [worker.model_copy(deep=True) for worker in self.workers.values()]
 
-    def submit(self, batch: list[TaskInput]) -> list[Task]:
+    def submit(self, batch: list[TaskInput | ImageTaskInput]) -> list[Task]:
         with self._lock:
             ids = []
             for item in batch:
@@ -93,13 +97,16 @@ class TaskStore:
             self._delivered.add(task_id)
             return self.tasks[task_id].model_copy(deep=True)
 
-    def update(self, task_id: str, worker_id: str, action: str, error: str | None = None) -> Task:
+    def update(self, task_id: str, worker_id: str, action: str, error: str | None = None,
+               *, image_result: bool = False) -> Task:
         with self._lock:
             task = self._get(task_id)
             if worker_id not in self.workers:
                 raise StoreError(404, "Worker not registered")
             if task.assigned_worker != worker_id:
                 raise StoreError(409, "Task is not assigned to this worker")
+            if action == "complete" and task.operation != "dummy" and not image_result:
+                raise StoreError(409, "Image tasks require a validated result upload")
             if action == "complete" and task.status == "completed":
                 return task.model_copy(deep=True)
             if action == "start":
@@ -125,3 +132,46 @@ class TaskStore:
             else:
                 raise ValueError("Unsupported task update action")
             return task.model_copy(deep=True)
+
+    def submit_images(self, items: list[ImageTaskInput], paths: list[Path]) -> list[Task]:
+        with self._lock:
+            tasks = self.submit(items)
+            self.input_files.update({task.task_id: path for task, path in zip(tasks, paths, strict=True)})
+            return tasks
+
+    def input_path(self, task_id: str, worker_id: str) -> Path:
+        with self._lock:
+            task = self._get(task_id)
+            if worker_id not in self.workers:
+                raise StoreError(404, "Worker not registered")
+            if task.assigned_worker != worker_id or task.status not in {"assigned", "running"}:
+                raise StoreError(409, "Only the active assigned worker may download input")
+            if task_id not in self.input_files:
+                raise StoreError(404, "Task has no image")
+            return self.input_files[task_id]
+
+    def accept_result(self, task_id: str, worker_id: str, data: bytes, directory: Path) -> Task:
+        with self._lock:
+            task = self._get(task_id)
+            if worker_id not in self.workers:
+                raise StoreError(404, "Worker not registered")
+            if task.assigned_worker != worker_id:
+                raise StoreError(409, "Task is not assigned to this worker")
+            if task.operation == "dummy":
+                raise StoreError(409, "Dummy tasks do not accept images")
+            if task.status == "completed":
+                if self.result_files[task_id].read_bytes() != data:
+                    raise StoreError(409, "Completed image cannot be replaced")
+                return task.model_copy(deep=True)
+            if task.status != "running":
+                raise StoreError(409, "Only a running image task can finish")
+            path = save_unique(directory, data, ".png")
+            self.result_files[task_id] = path
+            return self.update(task_id, worker_id, "complete", image_result=True)
+
+    def result_path(self, task_id: str) -> Path:
+        with self._lock:
+            task = self._get(task_id)
+            if task.status != "completed" or task_id not in self.result_files:
+                raise StoreError(404, "Completed image result not available")
+            return self.result_files[task_id]

@@ -12,6 +12,30 @@ import requests
 REQUEST_TIMEOUT = (3.05, 10)
 
 
+def execute_image(master_url: str, task: dict, worker_id: str) -> None:
+    # Lazy import preserves dummy-only use and script/module execution.
+    try:
+        from worker.image_processing import process_image, MAX_BYTES
+    except ModuleNotFoundError:
+        from image_processing import process_image, MAX_BYTES
+    task_url = f"{master_url}/tasks/{quote(task['task_id'], safe='')}"
+    with requests.get(f"{task_url}/input", params={"worker_id": worker_id},
+                      timeout=REQUEST_TIMEOUT, stream=True, allow_redirects=False) as response:
+        if response.status_code != 200:
+            raise ValueError(f"Image download failed: HTTP {response.status_code}")
+        data = bytearray()
+        for chunk in response.iter_content(65536):
+            data.extend(chunk)
+            if len(data) > MAX_BYTES:
+                raise ValueError("Downloaded image exceeds 10 MiB")
+    output = process_image(bytes(data), task["operation"], task["payload"]["parameters"])
+    response = requests.post(f"{task_url}/result", data={"worker_id": worker_id},
+                             files={"file": ("result.png", output, "image/png")},
+                             timeout=REQUEST_TIMEOUT, allow_redirects=False)
+    if response.status_code != 200:
+        raise ValueError(f"Result upload failed: HTTP {response.status_code}: {response.text[:200]}")
+
+
 def post_update(url: str, payload: dict, expected_status: int = 200) -> requests.Response:
     response = requests.post(url, json=payload, timeout=REQUEST_TIMEOUT, allow_redirects=False)
     if response.status_code != expected_status:
@@ -33,6 +57,15 @@ def run_worker(master_url: str, worker_id: str, poll_interval: float, task_delay
         identity = {"worker_id": worker_id}
         post_update(f"{task_url}/start", identity)
         print(f"Task {task_id}: running", flush=True)
+        if task["operation"] != "dummy":
+            try:
+                execute_image(master_url, task, worker_id)
+            except (ValueError, OSError, KeyError) as exc:
+                post_update(f"{task_url}/fail", {**identity, "error": str(exc)[:500] or "Image processing failed"})
+                print(f"Task {task_id}: failed: {exc}", flush=True)
+            else:
+                print(f"Task {task_id}: image completed", flush=True)
+            continue
         time.sleep(task_delay)
         # Dummy tasks never execute payload contents as code or commands.
         if task["operation"] != "dummy" or task["payload"].get("fail") is True:

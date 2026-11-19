@@ -1,6 +1,6 @@
 # Adaptive Distributed Computing Framework for Heterogeneous Devices
 
-Final-year project exploring how heterogeneous devices can share computing work through a central coordinator. Phase 2 adds an in-memory dummy-task queue, static round-robin assignment and worker polling to the Phase 1 registration API.
+Final-year project exploring how heterogeneous devices can share computing work through a central coordinator. Phase 3 adds distributed JPG/PNG processing over HTTP to the existing registration, dummy-task queue and static round-robin assignment. See [Phase 3 setup and testing](docs/phase3.md).
 
 ## Planned architecture
 
@@ -54,12 +54,12 @@ Dependency files specify bounded version ranges; they are not reproducible lockf
 1. **Foundation (complete):** directory scaffold, isolated environments, dependencies, conventions and environment checks.
 2. **Phase 1 — Connectivity (implemented):** minimal master HTTP API and worker registration. WebSockets remain future work.
 3. **Phase 2 - Tasks and static distribution (implemented):** in-memory dummy-task registry/queue, round-robin assignment, polling and task-state updates.
-4. **Future task execution and liveness:** image processing, worker heartbeat and disconnect handling, subject to separate authorization.
+4. **Phase 3 - Distributed image processing (implemented):** grayscale, resize, Gaussian blur and edge detection; input/result HTTP byte transfers. Liveness and recovery remain future work.
 5. **Scheduling:** start with a simple baseline, then adapt allocation using device capability and load; compare against the baseline.
 6. **Dashboard:** initialize React + Vite + Tailwind and expose system state through a minimal UI.
 7. **Evaluation:** heterogeneous-device experiments, failure tests, performance measurements and final documentation.
 
-No image processing, adaptive scheduling, heartbeat, fault recovery or frontend UI is implemented. No database or machine learning was added.
+No adaptive scheduling, heartbeat, fault recovery or frontend UI is implemented. No database or machine learning was added.
 
 ## Run the master and workers on Windows CMD
 

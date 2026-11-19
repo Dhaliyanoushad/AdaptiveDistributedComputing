@@ -1,22 +1,26 @@
 """HTTP API for registration and Phase 2 dummy-task distribution."""
 
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from master.models import Task, TaskBatch, TaskFailure, TaskPoll, TaskUpdate, WorkerRegistration
 from master.task_store import StoreError, TaskStore
+from master.image_routes import image_router
 
 logger = logging.getLogger("uvicorn.error")
 
 
-def create_app() -> FastAPI:
+def create_app(*, input_dir: Path | None = None, output_dir: Path | None = None) -> FastAPI:
     """Create an application with an independent, nonpersistent registry."""
     application = FastAPI(title="Adaptive Distributed Computing - Phase 2")
     store = TaskStore()
     application.state.store = store
     application.state.workers = store.workers
+    root = Path(__file__).resolve().parents[1]
+    application.include_router(image_router(store, input_dir or root / "uploads", output_dir or root / "outputs"))
 
     @application.exception_handler(StoreError)
     async def store_error_handler(request: Request, exc: StoreError) -> JSONResponse:
