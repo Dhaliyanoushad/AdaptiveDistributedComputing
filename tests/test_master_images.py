@@ -38,7 +38,7 @@ class ImageHTTPTests(unittest.IsolatedAsyncioTestCase):
         self.root = Path(self.temp.name)
         self.app = create_app(input_dir=self.root/'in', output_dir=self.root/'out')
 
-    async def raw(self, method, url, body=b'', content_type='application/json'):
+    async def raw(self, method, url, body=b'', content_type='application/json', extra_headers=None):
         parts = urlsplit(url)
         sent = []
         delivered = False
@@ -53,7 +53,7 @@ class ImageHTTPTests(unittest.IsolatedAsyncioTestCase):
         await self.app({'type': 'http', 'asgi': {'version': '3.0'}, 'http_version': '1.1',
                         'method': method, 'scheme': 'http', 'path': parts.path, 'root_path': '',
                         'query_string': parts.query.encode(),
-                        'headers': [(b'content-type', content_type.encode())],
+                        'headers': [(b'content-type', content_type.encode())] + list((extra_headers or {}).items()),
                         'client': ('127.0.0.1', 1), 'server': ('test', 80)}, receive, send)
         start = next(m for m in sent if m['type'] == 'http.response.start')
         return start['status'], b''.join(m.get('body', b'') for m in sent if m['type'] == 'http.response.body'), start['headers']

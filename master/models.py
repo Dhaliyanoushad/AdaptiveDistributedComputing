@@ -12,6 +12,26 @@ class WorkerRegistration(BaseModel):
     hostname: str = Field(strict=True, min_length=1, max_length=253)
 
 
+class ResourceMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    cpu_percent: float | None = Field(default=None, ge=0, le=100, strict=True)
+    ram_percent: float | None = Field(default=None, ge=0, le=100, strict=True)
+    available_ram_mb: float | None = Field(default=None, ge=0, strict=True)
+
+
+class Heartbeat(ResourceMetrics):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, json_schema_extra={"examples": [{
+        "worker_id": "worker-1", "timestamp": "2026-11-19T10:00:00Z", "cpu_percent": 12.5,
+        "ram_percent": 45.0, "available_ram_mb": 4096.0}]})
+    worker_id: str = Field(strict=True, min_length=1, max_length=128)
+    timestamp: datetime | None = None
+
+
+class WorkerRecord(WorkerRegistration, ResourceMetrics):
+    last_seen: datetime
+    status: Literal["online", "offline"] = "online"
+
+
 class TaskInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     operation: Literal["dummy"]
@@ -30,6 +50,7 @@ class TaskUpdate(BaseModel):
 
 class TaskFailure(TaskUpdate):
     error: str = Field(strict=True, min_length=1, max_length=500)
+    retryable: bool = Field(default=False, strict=True)
 
 
 class Task(TaskInput):
@@ -45,10 +66,12 @@ class Task(TaskInput):
     completed_at: datetime | None = None
     failed_at: datetime | None = None
     error: str | None = None
+    attempt_history: list[dict[str, JsonValue]] = Field(default_factory=list)
 
 
 class TaskPoll(BaseModel):
     task: Task | None
+    assignment_token: str | None = None
 
 
 class ImageTaskInput(BaseModel):

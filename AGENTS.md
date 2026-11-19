@@ -11,7 +11,8 @@
 - Phase 3 additionally permits JPG/PNG image uploads, HTTP input/result byte transfer, OpenCV grayscale/resize/Gaussian blur/edge detection and completed-result viewing/downloads. Preserve dummy tasks and static distribution. Do not implement adaptive scheduling, heartbeat, fault recovery or UI without further authorization.
 - Validate upload types, byte/pixel limits and parameters. Store images only in ignored uploads/ and outputs/ using server-generated names. Never send master filesystem paths to workers. Image completion must validate ownership, running status and decoded output; it cannot bypass result upload through the dummy completion endpoint.
 - Run one master process. Synchronize registry, queue, assignment and transition changes with the store lock. Registered idle workers are eligible; each may hold one active task. Preserve ownership checks and idempotent completion.
-- Worker reconnection, task redelivery and retries are not supported yet. Keep duplicate registration protection.
+- Phase 4 permits psutil resource metrics, independent worker heartbeat threads, lifecycle-owned master timeout checks and session-fenced reconnection after offline detection. Preserve duplicate online registration protection. Legacy identities cannot reconnect. Do not introduce adaptive scheduling, task redelivery, retries or recovery (Phase 5).
+- Keep session tokens private and out of worker-list responses/logs. Fence task updates and image transfers by the assignment's session generation; old tasks must not transfer to a new session. Use monotonic master receipt time for timeout decisions, server UTC for last_seen, and injected clocks in timeout tests.
 
 ## Conventions
 
@@ -40,3 +41,17 @@
 - Run dependency checks after installation and focused tests when behavior is introduced.
 - Report commands run, observed results, failures and remaining manual steps honestly; never claim unrun checks passed.
 - Every future phase must include automated tests, execute the complete relevant regression suite (including earlier phases), fix introduced failures, and update `docs/TESTING_GUIDE.md`, `docs/AUTOMATED_TESTS.md` and `docs/TEST_RESULTS.md`. Record actual passed/failed counts and execution limitations; keep unperformed manual/LAN tests separate from automated results.
+
+## Phase 5 scope update (supersedes earlier no-recovery restrictions)
+
+- Permit selectable static/adaptive rule-based scheduling and bounded timeout/explicit-failure retries. Preserve static as the default baseline; no ML or performance claims.
+- Require both current session and per-assignment generation for modern worker mutations and image transfers. Never expose credentials in public task history, logs or scheduler summaries. Legacy static clients cannot reconnect or receive secure retries.
+- Keep assignment, recovery, queue deduplication, attempt history and result publication under the store lock. Retain original image inputs across retries. Completed results must not be replaced by stale attempts.
+- Follow docs/phase5.md for scoring, fallback, fairness and attempt semantics. Master restart persistence, React frontend and Phase 6 are outside scope.
+
+## Phase 6 scope update (supersedes earlier no-frontend restrictions)
+
+- Permit the existing local React/Vite/TypeScript/Tailwind dashboard, read-only public snapshot WebSocket and explicit-origin CORS. Preserve all scheduling/recovery algorithms and earlier APIs.
+- Never put worker session or assignment tokens in dashboard state, browser storage, public snapshots or URLs. Dashboard requests need no worker credentials. Worker-only originals remain restricted.
+- Snapshot under the store lock, release it before encoding/network sends, bound update frequency and slow sends, and clean up disconnected clients. Frontend subscriptions must reconnect with backoff, provide bounded polling fallback and clean up on unmount.
+- Frontend tests use Vitest/React Testing Library; run tests and production build along with full Python regressions. Record dependency advisories and blocked live/browser verification honestly. No benchmarking/Phase 7, database or new scheduling behavior.

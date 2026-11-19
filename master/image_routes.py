@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from master.image_files import MAX_BYTES, inspect_image, save_unique
@@ -88,12 +88,17 @@ def image_router(store: TaskStore, input_dir: Path, output_dir: Path) -> APIRout
             for file in files:
                 await file.close()
 
-    @router.get("/tasks/{task_id}/input")
-    async def download_input(task_id: str, worker_id: str) -> FileResponse:
-        return FileResponse(store.input_path(task_id, worker_id), media_type="application/octet-stream")
+    @router.get("/tasks/{task_id}/input", responses={401: {"description": "Invalid session"},
+                404: {"description": "Task or worker not found"}, 409: {"description": "Wrong owner, offline worker or old task session"}})
+    async def download_input(task_id: str, worker_id: str, x_worker_session: str | None = Header(default=None),
+                             x_task_assignment: str | None = Header(default=None)) -> FileResponse:
+        return FileResponse(store.input_path(task_id, worker_id, x_worker_session, x_task_assignment), media_type="application/octet-stream")
 
-    @router.post("/tasks/{task_id}/result")
-    async def upload_result(task_id: str, worker_id: str = Form(...), file: UploadFile = File(...)) -> Task:
+    @router.post("/tasks/{task_id}/result", responses={401: {"description": "Invalid session"},
+                 404: {"description": "Task or worker not found"}, 409: {"description": "Invalid owner/state/session"}})
+    async def upload_result(task_id: str, worker_id: str = Form(...), file: UploadFile = File(...),
+                            x_worker_session: str | None = Header(default=None),
+                            x_task_assignment: str | None = Header(default=None)) -> Task:
         task = store.get_task(task_id)
         data, (width, height, mode) = await read_image(file, output=True)
         expected = task.payload.get("parameters", {})
@@ -103,7 +108,7 @@ def image_router(store: TaskStore, input_dir: Path, output_dir: Path) -> APIRout
             raise HTTPException(422, "Result dimensions do not match the task")
         if task.operation in {"grayscale", "edge_detection"} and mode != "L":
             raise HTTPException(422, "Operation requires an 8-bit grayscale output")
-        return store.accept_result(task_id, worker_id, data, output_dir)
+        return store.accept_result(task_id, worker_id, data, output_dir, x_worker_session, x_task_assignment)
 
     @router.get("/tasks/{task_id}/result")
     async def view_result(task_id: str) -> FileResponse:

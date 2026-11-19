@@ -38,6 +38,10 @@ class MasterTests(unittest.IsolatedAsyncioTestCase):
     async def register(self, payload):
         return await self.request("POST", "/workers/register", json.dumps(payload).encode())
 
+    async def worker_identities(self):
+        status, records = await self.request("GET", "/workers")
+        return status, [{key: record[key] for key in ("worker_id", "hostname")} for record in records]
+
     async def test_health(self):
         self.assertEqual(await self.request("GET", "/health"), (200, {"status": "ok"}))
 
@@ -49,7 +53,7 @@ class MasterTests(unittest.IsolatedAsyncioTestCase):
         with self.assertLogs("uvicorn.error", level="INFO") as captured:
             self.assertEqual(await self.register(worker), (201, worker))
         self.assertIn("laptop-1", captured.output[0])
-        self.assertEqual(await self.request("GET", "/workers"), (200, [worker]))
+        self.assertEqual(await self.worker_identities(), (200, [worker]))
 
     async def test_duplicate_id_does_not_replace_original(self):
         original = {"worker_id": "same", "hostname": "original"}
@@ -57,13 +61,13 @@ class MasterTests(unittest.IsolatedAsyncioTestCase):
         status, body = await self.register({"worker_id": "same", "hostname": "replacement"})
         self.assertEqual(status, 409)
         self.assertEqual(body["detail"], "Worker ID already registered")
-        self.assertEqual(await self.request("GET", "/workers"), (200, [original]))
+        self.assertEqual(await self.worker_identities(), (200, [original]))
 
     async def test_multiple_workers(self):
         workers = [{"worker_id": str(i), "hostname": "shared-host"} for i in range(2)]
         for worker in workers:
             self.assertEqual((await self.register(worker))[0], 201)
-        self.assertEqual(await self.request("GET", "/workers"), (200, workers))
+        self.assertEqual(await self.worker_identities(), (200, workers))
 
     async def test_validation_rejects_invalid_payloads_without_mutating_registry(self):
         valid = {"worker_id": "worker", "hostname": "host"}

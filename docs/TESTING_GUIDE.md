@@ -1,5 +1,9 @@
 # Teammate testing guide — Phases 1, 2 and 3
 
+**Phase 5 compatibility update:** Sections 1-8 remain as historical phase procedures. The Phase 5 section supersedes earlier expectations of stuck modern-worker tasks after timeout. They are now retried up to the configured budget. Session-aware hand-driven task/image requests additionally need `X-Task-Assignment` from the polling response. Legacy manual Phase 1-3 examples remain first-attempt/static compatibility tests only. Never interpret historical no-recovery statements as the current Phase 5 policy.
+
+**Phase 4 compatibility note:** the earlier sections are preserved as historical procedures. Current `/workers` records add status/metrics. Reconnection is now available only for session-aware workers after offline detection; the Phase 4 section below supersedes older statements that all reconnection is unsupported. For the slow hand-driven Phase 1-3 registration/poll/update exercises, start the master with `set "WORKER_TIMEOUT=3600"` so legacy manual identities do not expire in 10 seconds. Use a fresh master and reset this to 10 for Phase 4 timeout cases. Do not leave a long timeout enabled when measuring offline detection.
+
 **Manual testing has not been performed by the teammate yet.** Everything below is a procedure and expected outcome, not an observed pass. Record results in the blank checklist at the end and append actual evidence to [TEST_RESULTS.md](TEST_RESULTS.md). Automated suites and their limits are described in [AUTOMATED_TESTS.md](AUTOMATED_TESTS.md).
 
 ## 1. Prepare Windows CMD
@@ -257,3 +261,360 @@ Leave outcome cells blank until actually executed. Use Pass, Fail or Blocked wit
 | LAN-3 | Downloaded LAN output and device/network evidence | | |
 
 For a failure, record exact commands, request body/file, expected/actual HTTP response, task/worker IDs and logs. Exclude secrets and private image data from committed reports. Append actual manual results and later retests to TEST_RESULTS.md; preserve this procedure as the repeatable reference.
+
+## 8. Phase 4: resource monitoring and heartbeats — NOT YET EXECUTED
+
+These are pending teammate procedures, not reported passes. Preserve earlier Phase 1-3 checks; repeat their regressions after this phase. No LAN or live TCP Phase 4 result is claimed.
+
+### Start the master and two monitored workers
+
+Stop older project processes with Ctrl+C. Window A (CMD):
+
+```bat
+cd /d C:\Users\daliy\Desktop\AdaptiveDistributedComputing
+set "WORKER_TIMEOUT=10"
+set "TIMEOUT_CHECK_INTERVAL=1"
+master\.venv\Scripts\python.exe -m uvicorn master.main:app --host 127.0.0.1 --port 8000
+```
+
+Window B:
+
+```bat
+cd /d C:\Users\daliy\Desktop\AdaptiveDistributedComputing
+set "MASTER_URL=http://127.0.0.1:8000"
+set "WORKER_ID=phase4-worker-1"
+set "POLL_INTERVAL=1"
+set "TASK_DELAY=15"
+set "HEARTBEAT_INTERVAL=3"
+set "HEARTBEAT_HTTP_TIMEOUT=2"
+worker\.venv\Scripts\python.exe worker\worker.py
+```
+
+Window C: repeat B with `WORKER_ID=phase4-worker-2`. Unique IDs are required. Defaults are heartbeat interval 3 seconds, heartbeat connect/read timeout 2 seconds each, master timeout 10 seconds and sweep interval 1 second. Intervals are finite positive numbers; existing TASK_DELAY accepts zero. Existing task HTTP timeout remains connect 3.05/read 10 seconds. HEARTBEAT_INTERVAL is the wait after a heartbeat finishes; slow requests add time. Set the master timeout above the expected interval and latency.
+
+### P4-1: API schema, metrics and timestamps
+
+Window D:
+
+```bat
+curl.exe -i http://127.0.0.1:8000/workers
+curl.exe -i http://127.0.0.1:8000/workers/phase4-worker-1
+timeout /t 4 /nobreak
+curl.exe http://127.0.0.1:8000/workers/phase4-worker-1
+```
+
+Expected: 200; records retain worker_id/hostname and add `last_seen`, `status`, `cpu_percent`, `ram_percent`, `available_ram_mb`. For example (numbers vary):
+
+```json
+{"worker_id":"phase4-worker-1","hostname":"YOUR-PC","last_seen":"2026-11-19T10:00:03Z","status":"online","cpu_percent":12.5,"ram_percent":45.0,"available_ram_mb":4096.0}
+```
+
+last_seen should advance roughly every 3 seconds on an idle local network; it is server UTC receipt time, not the worker's clock. Timeout decisions use elapsed monotonic server time. Resource errors produce null metrics without invalidating the heartbeat. Available RAM uses MiB (1024² bytes), despite the field's MB name. The initial nonblocking CPU sample may be 0; later values reflect utilization since the previous sample. Compare approximately with Windows Task Manager; do not require identical instantaneous values. Observe normal use of the machine rather than creating an uncontrolled load test. Unknown worker detail returns 404. Tokens must never appear in GET worker responses.
+
+Swagger `/docs` exposes the heartbeat schema/example, status ranges and session headers. Metrics percentages must be finite numbers in 0-100; available RAM must be finite and nonnegative. Null denotes unavailable. Extra keys and malformed timestamp return 422. The optional client timestamp is informational and cannot postpone timeout.
+
+### P4-2: periodic heartbeats during task execution
+
+With B/C running, submit dummy tasks using earlier commands and observe a 15-second dummy task. Fetch worker detail before/during/after execution: last_seen advances while the task is running and status stays online, despite the 10-second timeout. Task output and polling should continue independently.
+
+Also submit a multi-image batch with the Phase 3 commands. Watch task transitions and worker last_seen together. Image work is real OpenCV work; TASK_DELAY does not slow image operations, and small images may finish between heartbeat samples. Use several detailed permitted images if needed; record observed durations and avoid claiming a short task proves long-duration continuity. The automated synchronization test separately verifies heartbeats while processing is blocked.
+
+### P4-3: timeout without read-triggered detection
+
+Stop idle worker B with Ctrl+C. Do not call `/workers` for 12 seconds:
+
+```bat
+timeout /t 12 /nobreak
+curl.exe http://127.0.0.1:8000/workers/phase4-worker-1
+```
+
+Expected offline with last_seen unchanged and the most recent metrics retained (now stale). The background lifespan task expires it even if nobody calls GET; the controlled-clock automated test establishes this without relying on reads. Exactly 10 seconds is still online; strictly more than 10 expires, normally observed within one further sweep interval. Normal request delays/OS scheduling can add jitter. Stopping a worker does not immediately unregister it.
+
+Submit more tasks while worker 1 is offline and worker 2 is idle: only the online eligible worker receives new work. CPU/RAM values are never used to rank or assign workers.
+
+### P4-4: restart and reconnect without identity hijacking
+
+Restart B using its same commands and ID **after it is offline**. Expected registration succeeds, status becomes online, metrics reset to null until the next heartbeat, and a new private session token is issued. An idle worker with no old active task can process new tasks. Starting another process with the same ID while B is online must still return 409 and leave B unchanged.
+
+To test interrupted work, use a fresh master and one worker with TASK_DELAY=15. Submit one dummy task, wait for running, then stop the worker. After timeout, verify the task is still running with the original assignment/attempt_count (1). Restart that ID. Its old task must not be started/completed/failed by the new session; the task remains busy and stuck. A previous unpolled assignment may cause polling to return 409, stopping the restarted worker. No retry/requeue or automatic task takeover is expected. Reset the demonstration by restarting the master and workers; do not manually mutate registry internals.
+
+### P4-5: explicit session and heartbeat negative requests
+
+Use a fresh master with no running workers to isolate this case. Register via CMD and inspect the response **locally**:
+
+```bat
+curl.exe -i -X POST http://127.0.0.1:8000/workers/register -H "Content-Type: application/json" -H "X-Worker-Protocol: session-v1" -d "{\"worker_id\":\"session-test\",\"hostname\":\"manual-host\"}"
+set "WORKER_SESSION=PASTE_PRIVATE_X_WORKER_SESSION_HEADER"
+curl.exe -i -X POST http://127.0.0.1:8000/workers/heartbeat -H "X-Worker-Session: %WORKER_SESSION%" -H "Content-Type: application/json" -d "{\"worker_id\":\"session-test\",\"cpu_percent\":12.5,\"ram_percent\":45,\"available_ram_mb\":4096}"
+```
+
+Expected registration 201 with the original JSON identity body and private response header; heartbeat 200 with extended worker record. Send heartbeat promptly, before timeout. Do not paste real tokens into reports, screenshots or committed files. This hand-driven identity has no background sender.
+
+Repeat promptly with CPU -1/101, RAM 101/string/bool, available RAM -1 or an extra field: expect 422 and unchanged last_seen. Send an unknown worker ID: 404. Missing or incorrect token for session-test: 401. After expiry, the correct old token gets 409; registration with session-v1 then issues a different token. The old token gets 401 after rotation. Replace WORKER_SESSION with the new header and repeat the valid heartbeat: 200. Clear it afterward with `set "WORKER_SESSION="`.
+
+For a session-aware worker, attach this header to polling, task start/complete/fail, input download and multipart result upload. Without it those protected operations are rejected (image result structure validation may return 422 before the session check if the file is invalid). Registration response body is intentionally unchanged; GET worker records are extended. Legacy registrations without the protocol header preserve the earlier trusted-network behavior, but cannot reconnect or be upgraded. Manual Phase 1-3 workers need manual heartbeats or the longer timeout noted at the top of this guide.
+
+### P4 troubleshooting and limits
+
+| Symptom | Expected action / limitation |
+| --- | --- |
+| Null metrics | psutil sampling failed; heartbeat still works. Check worker warnings/permissions and later samples |
+| First CPU value 0 | Nonblocking psutil baseline sample; check later heartbeats |
+| Heartbeat warning / status offline | Check URL, HTTP latency, process health and timeout settings; no automatic registration/recovery loop |
+| Restart returns 409 | Wait for offline; an online identity remains protected. Legacy IDs cannot reconnect |
+| Restarted worker has no work or task-session 409 | Old task remains assigned/running; Phase 5 recovery is deliberately absent |
+| 401 after master/worker restart | Token no longer matches; restart/register the worker explicitly; tokens are not persisted |
+| TCP works but large task interrupted | Heartbeat is independent; task requests still have their existing HTTP timeouts |
+| Worker shutdown delayed briefly | Heartbeat thread signals stop and joins up to connect+read timeout+1 second (5 seconds by default); Requests DNS/OS stalls can exceed nominal HTTP timeouts, so daemon-thread termination remains best effort |
+
+Run one master process. No persistence, authenticated enrollment, adaptive scheduler or task recovery was added. Session tokens fence reconnecting workers; legacy enrollment is still trusted-network only. Heartbeat transport failures are logged and later scheduled heartbeats continue; task HTTP failures stop the task loop. Reconnection requires explicitly restarting a worker process, not an automatic reconnect loop.
+
+For future two-laptop testing, use the existing LAN section, the same heartbeat variables and unique IDs. Check metrics/last_seen from both devices, interrupt the remote worker, wait for offline, then restart it. **LAN cases remain NOT YET EXECUTED.**
+
+| ID | Phase 4 manual case | Pass/Fail/Blocked | Evidence / issue / retest |
+| --- | --- | --- | --- |
+| P4-1 | Online registry, resource metrics, timestamps and Swagger schemas | | |
+| P4-2 | Heartbeat continuity during dummy and image work | | |
+| P4-3 | Background offline timeout without intermediate GET requests | | |
+| P4-4 | Offline worker excluded from new assignments | | |
+| P4-5 | Idle offline reconnect; online duplicate blocked | | |
+| P4-6 | Old session rejected for heartbeat/task/image updates | | |
+| P4-7 | Interrupted task preserved; no retry/requeue after reconnect | | |
+| P4-8 | Invalid metrics/configuration and nullable resource samples | | |
+| P4-9 | Clean worker/master monitoring shutdown | | |
+| P4-LAN | Metrics, timeout and reconnect across two laptops | | |
+
+## 9. Phase 5 scheduling and recovery — NOT YET EXECUTED
+
+No teammate manual, live TCP or LAN result is claimed here. Keep Pass/Fail fields blank until actual execution. Full policy/defaults are in [phase5.md](phase5.md).
+
+### Same-laptop setup and mode comparison
+
+Fresh master means stop project workers/master, then restart. Do not delete unrelated files. In CMD A:
+
+```bat
+cd /d C:\Users\daliy\Desktop\AdaptiveDistributedComputing
+set "SCHEDULER_MODE=static"
+set "MAX_TASK_ATTEMPTS=3"
+set "METRICS_MAX_AGE=8"
+set "FAIRNESS_MAX_SKIPS=5"
+set "HISTORY_MIN_SAMPLES=3"
+set "MIN_AVAILABLE_RAM_MB=128"
+set "RAM_TARGET_MB=1024"
+set "WORKER_TIMEOUT=10"
+set "TIMEOUT_CHECK_INTERVAL=1"
+master\.venv\Scripts\python.exe -m uvicorn master.main:app --host 127.0.0.1 --port 8000
+```
+
+CMD B and C (use worker-1 in B and worker-2 in C):
+
+```bat
+cd /d C:\Users\daliy\Desktop\AdaptiveDistributedComputing
+set "MASTER_URL=http://127.0.0.1:8000"
+set "WORKER_ID=worker-1"
+set "HEARTBEAT_INTERVAL=3"
+set "HEARTBEAT_HTTP_TIMEOUT=2"
+set "POLL_INTERVAL=1"
+set "TASK_DELAY=15"
+worker\.venv\Scripts\python.exe worker\worker.py
+```
+
+Wait for both to appear online. Submit the same dummy/image workloads from earlier sections and inspect:
+
+```bat
+curl.exe http://127.0.0.1:8000/scheduler
+curl.exe http://127.0.0.1:8000/tasks
+```
+
+Repeat with a fresh master and `set "SCHEDULER_MODE=adaptive"`. Preserve workload/count and record actual CPU/RAM/history and assignments; do not infer speedup from task counts. Set `TASK_ID` to a real returned ID and inspect:
+
+```bat
+set "TASK_ID=PASTE_REAL_TASK_ID"
+curl.exe http://127.0.0.1:8000/tasks/%TASK_ID%/attempts
+```
+
+Expected mode/configuration, loads 0/1, mean completion samples, and task attempt history containing mode, score, assignment_reason, worker and timestamps. A score can be null for fallback/static/fairness decisions without a fresh score. No private tokens should appear in these public responses.
+
+### Controlled uneven metrics, fallback and fairness
+
+Same-laptop workers observe the same whole-host CPU/RAM, so two local processes do not provide a controlled heterogeneous-hardware comparison. For a deterministic manual policy check, use a fresh adaptive master with no automatic workers. Register two identities with session-v1 as in Phase 4, retain both private tokens locally, and send manual heartbeats promptly (or temporarily use WORKER_TIMEOUT=3600 and METRICS_MAX_AGE=3600 for this hand-driven exercise):
+
+```bat
+set "SESSION_A=PASTE_FIRST_PRIVATE_SESSION"
+set "SESSION_B=PASTE_SECOND_PRIVATE_SESSION"
+curl.exe -X POST http://127.0.0.1:8000/workers/heartbeat -H "X-Worker-Session: %SESSION_A%" -H "Content-Type: application/json" -d "{\"worker_id\":\"manual-a\",\"cpu_percent\":95,\"ram_percent\":95,\"available_ram_mb\":128}"
+curl.exe -X POST http://127.0.0.1:8000/workers/heartbeat -H "X-Worker-Session: %SESSION_B%" -H "Content-Type: application/json" -d "{\"worker_id\":\"manual-b\",\"cpu_percent\":5,\"ram_percent\":10,\"available_ram_mb\":4096}"
+```
+
+Submit one task: expect manual-b selected absent an overdue fairness counter. If both eligible workers have no full/fresh metrics, expect recorded round-robin fallback. If some fresh samples exist, stale/missing samples are excluded; all fresh workers below MIN_AVAILABLE_RAM_MB leaves work pending. Repeatedly complete one task at a time while both stay eligible: a consistently lower-scoring worker eventually receives the fairness decision after configured skips. Use polling tokens for start/finish, never public task data as a credential. These supplied metrics are synthetic policy inputs, not measured hardware load.
+
+For real uneven load on two laptops, use normal foreground applications on only one laptop and observe its metrics, without uncontrolled stress programs. Do not expect deterministic values or claim a benchmark result. Cold-start history uses a neutral .5 until HISTORY_MIN_SAMPLES successes; metric changes must not move a currently running task.
+
+### Timeout/requeue/reassignment during dummy or image work
+
+Restore default timeouts and start a fresh static master plus two real workers. Submit a batch; for a deterministic slow stop case use TASK_DELAY=15 dummy work. Wait for a task to be running, identify its worker, then Ctrl+C that worker. In D:
+
+```bat
+timeout /t 12 /nobreak
+curl.exe http://127.0.0.1:8000/workers
+curl.exe http://127.0.0.1:8000/tasks/%TASK_ID%
+curl.exe http://127.0.0.1:8000/tasks/%TASK_ID%/attempts
+```
+
+Expected: offline old worker; first attempt reason heartbeat_timeout; task pending if nobody else is eligible, or assigned/running on the remaining worker; attempt count increments only on a new assignment. Eventually expect completed output after the second worker finishes. No duplicate task IDs or duplicate queue ownership. Repeated waits/status reads do not create extra attempts.
+
+Repeat with a permitted multi-image batch, watching worker messages to stop during an actual image task. Small images may finish before Ctrl+C: if so, record that the interruption was not achieved and repeat rather than declaring recovery passed. TASK_DELAY does not slow images. Keep original inputs only on the master. After reassignment the other worker must download bytes and produce a valid viewable/downloadable PNG. Inputs must remain present across retries; stale outputs must not replace the accepted file.
+
+Restart the stopped worker with the same ID after offline detection. Registration should rotate its session. It may receive new assignments; it must not reuse a previous session or assignment token. The same task ID can return only as a newly counted generation. An online duplicate ID remains rejected with 409.
+
+### Stale mutation/output and retry-limit checks
+
+For controlled credential tests, register a manual session-aware worker and poll one task. Record `assignment_token` locally as ATTEMPT_OLD, without putting it into reports. Send start with both headers. Stop heartbeats and wait for timeout; register again or let another worker take a new attempt. Try start/complete/fail and image input/result operations using old headers: expect 401 for a stale session or 409 for invalid ownership/generation. Use a structurally valid result image to isolate generation validation; an invalid image may fail earlier with 422.
+
+Current-generation example (substitute actual session/attempt values):
+
+```bat
+set "WORKER_SESSION=PRIVATE_CURRENT_SESSION"
+set "TASK_ASSIGNMENT=PRIVATE_CURRENT_POLL_TOKEN"
+curl.exe -i -X POST http://127.0.0.1:8000/tasks/%TASK_ID%/start -H "X-Worker-Session: %WORKER_SESSION%" -H "X-Task-Assignment: %TASK_ASSIGNMENT%" -H "Content-Type: application/json" -d "{\"worker_id\":\"manual-a\"}"
+curl.exe -i -X POST http://127.0.0.1:8000/tasks/%TASK_ID%/fail -H "X-Worker-Session: %WORKER_SESSION%" -H "X-Task-Assignment: %TASK_ASSIGNMENT%" -H "Content-Type: application/json" -d "{\"worker_id\":\"manual-a\",\"error\":\"temporary test error\",\"retryable\":true}"
+```
+
+For an automatic deterministic budget test on a fresh master with real workers:
+
+```bat
+curl.exe -X POST http://127.0.0.1:8000/tasks -H "Content-Type: application/json" -d "{\"tasks\":[{\"operation\":\"dummy\",\"payload\":{\"fail\":true,\"retryable\":true}}]}"
+```
+
+With MAX_TASK_ATTEMPTS=3 expect exactly three assignments, retry/retry/failed history and terminal failed. TASK_DELAY=15 makes this take about 45 seconds plus polling; use TASK_DELAY=.5 on freshly launched workers for a shorter check. With retryable omitted or false, dummy/processing failure is terminal after one attempt. Max attempts 1 disables retry. Missing assignment token on modern task updates returns 409. Identical completed result uploads with current credentials remain idempotent; changed/stale bytes cannot alter the accepted result. Verify download contents and file count before/after rejected uploads.
+
+### Shutdown, troubleshooting and LAN checks
+
+- No online worker: work stays pending; registration/heartbeat/sweep later triggers distribution. Legacy-only capacity cannot execute a secure retry, and adaptive mode excludes legacy identities.
+- Retryable pending work may wait behind a recovered FIFO head that needs a session-aware worker. Use updated workers, not registry mutation.
+- Worker network error: a reachable master may accept a retryable failure report; otherwise task-loop exit stops heartbeats and timeout initiates recovery. Do not manually send duplicate claims to compensate.
+- Master restart loses queue, attempt history and credentials; existing files do not constitute recovered tasks. Restart workers and resubmit explicitly. This is not persistence testing.
+- For LAN, use the existing two-laptop setup with master `--host 0.0.0.0`, the actual LAN MASTER_URL and unique IDs. Compare static/adaptive decisions with recorded metrics, stop the remote worker during work, observe reassignment locally, restart remotely and download the result. Do not copy input files onto the remote worker. No LAN pass is claimed.
+- Clear private token variables after tests. Do not commit secrets, test images or outputs.
+
+| ID | Phase 5 manual case (NOT YET EXECUTED) | Pass/Fail/Blocked | Evidence / retest |
+| --- | --- | --- | --- |
+| P5-1 | Static baseline preserved and mode/configuration API correct | | |
+| P5-2 | Adaptive low/high CPU/RAM selection with synthetic metrics | | |
+| P5-3 | Stale/missing metrics, cold-start and low-memory behavior | | |
+| P5-4 | Fairness, busy/offline exclusion and no running migration | | |
+| P5-5 | Assigned/running timeout, requeue and reassignment | | |
+| P5-6 | Image bytes preserved through retry and valid completed PNG | | |
+| P5-7 | Old session/generation rejected; accepted output unchanged | | |
+| P5-8 | Permanent failure and exactly MAX_TASK_ATTEMPTS for retryable failure | | |
+| P5-9 | Duplicate completion/recovery does not duplicate work | | |
+| P5-10 | No-worker pending queue, shutdown/restart limitations | | |
+| P5-LAN | Two-laptop distribution, disconnect/restart and result transfer | | |
+
+## 10. Phase 6 React dashboard — NOT YET EXECUTED
+
+All procedures below are pending teammate manual tests. Existing Phase 1-5 instructions remain above. Do not copy automated passes into this checklist. Capture actual outcomes, revision, browser/version, screenshots and console/network evidence in TEST_RESULTS.md, excluding private tokens/images.
+
+### Localhost: install and start four processes
+
+Terminal A (master):
+
+```bat
+cd /d C:\Users\daliy\Desktop\AdaptiveDistributedComputing
+set "SCHEDULER_MODE=static"
+set "CORS_ALLOWED_ORIGINS=http://127.0.0.1:5173,http://localhost:5173"
+master\.venv\Scripts\python.exe -m uvicorn master.main:app --host 127.0.0.1 --port 8000
+```
+
+Terminal B (worker 1):
+
+```bat
+cd /d C:\Users\daliy\Desktop\AdaptiveDistributedComputing
+set "MASTER_URL=http://127.0.0.1:8000"
+set "WORKER_ID=dashboard-worker-1"
+set "HEARTBEAT_INTERVAL=3"
+set "POLL_INTERVAL=1"
+set "TASK_DELAY=15"
+worker\.venv\Scripts\python.exe worker\worker.py
+```
+
+Terminal C: repeat B with WORKER_ID=dashboard-worker-2. Terminal D (frontend):
+
+```bat
+cd /d C:\Users\daliy\Desktop\AdaptiveDistributedComputing\frontend
+npm ci
+set "VITE_MASTER_URL=http://127.0.0.1:8000"
+npm run dev
+```
+
+Use npm install for initial setup if a lockfile is absent; the current project includes one. Stop on dependency errors and record setup as blocked. Existing Python environments/requirements are prepared using section 1. Open http://127.0.0.1:5173 in a browser. Development binds loopback, strict port 5173. An occupied port is an error, not an automatic switch. Change the origin configuration if deliberately using another frontend port. Optional frontend/.env uses the same VITE_MASTER_URL; do not overwrite an existing file. Restart Vite after configuration changes. Backend CORS changes require master restart.
+
+### P6-1: overview, empty and error states
+
+Start with a fresh master and frontend only. Expect real zero counts and no workers/tasks/results, not example data. Navigate every section and confirm helpful empty states. With the master stopped, expect a loading/connection error and no fabricated counts. Start the master and observe reconnect plus a fresh snapshot. If prior data was displayed, a connection error must clearly identify the retained snapshot as old. Screenshot initial empty overview and the error notice.
+
+After starting B/C, compare overview online/offline counts and Workers cards with GET /workers in Swagger. Compare task totals and each pending/assigned/running/completed/failed count with GET /tasks. Capture overview and worker-card screenshots. Scheduling mode must match GET /scheduler; there is no runtime mode toggle. Restart all processes with SCHEDULER_MODE=adaptive and verify the explanation/configuration changes. Do not interpret the UI as a performance improvement measurement.
+
+### P6-2: uploads and operation parameters
+
+Open Image processing. Select 2-3 real JPG/PNG files with visible detail. Choose grayscale and submit. Expect a clear in-flight label, then returned task IDs and tracking buttons; queued tasks are not labeled completed on upload. Track a task, observe current assignment and attempt history, then navigate Results when completed.
+
+Repeat resize with exact width/height (e.g. 320×240), Gaussian blur with odd kernel 5 and edge detection with thresholds 100/200. Confirm only appropriate fields appear. Compare the completed visual output and resize dimensions. Upload more than 20 files, a text file, empty file, >10 MiB file, oversized decoded image, invalid resize values, even kernel and reversed thresholds: expect client or backend error without a success notice. The file picker may filter unsupported extensions; choose an invalid file through browser tools only if needed, without altering the application. Browser decoding cannot replace backend verification; a corrupt disguised PNG should be rejected.
+
+Capture upload fields, validation message, created IDs and one result per operation. Do not include private source images in committed screenshots. Upload uses Fetch status, not byte percentage.
+
+### P6-3: worker metrics, task search and history
+
+In Workers, verify ID, hostname, online/offline status, CPU/RAM meters, available MiB and local display of last_seen. Null metrics say Unavailable; old/offline values are labeled stale. Compare approximately with Task Manager (sampling times differ). Task table search must match task ID, operation or worker; status filters include Assigned separately from Pending/Running. Open details and compare attempt history/reasons against GET /tasks/{id}/attempts. Multiple retries/reassignment should update while details are open, without changing task ID.
+
+Capture task filters, detailed history and stale worker metrics. Results must include completed images only, excluding dummy/pending/failed tasks. Preview opens the HTTP result, download uses the existing attachment endpoint, and missing results show an error/placeholder rather than a broken local filesystem link. Originals are deliberately not available because the existing input API is worker-only. Inspect Network/storage to confirm the frontend never requests worker session/assignment credentials or stores them in localStorage/sessionStorage.
+
+### P6-4: disconnect, recovery and live-update transport
+
+Submit dummy work with TASK_DELAY=15. Stop its owning worker while running and observe last_seen stop, offline status after timeout, attempt history with heartbeat_timeout and reassignment to the remaining worker. Repeat during a real image operation if its execution is long enough; a tiny image may finish too quickly, which is not a recovery pass. The valid new result must become downloadable, with original task ID and increased attempts. Restart the old worker after offline detection and verify online status/new assignments. Use Phase 5 procedures for stale-result rejection; the dashboard does not hold the private credentials needed to submit those mutations.
+
+Open browser DevTools (F12), Network, and filter WS. Expect one active /ws/dashboard socket and changed-state snapshot messages, with no private token fields. Initial GET /workers, /tasks, /scheduler is normal. Frames arrive only when state changes, not as invented activity. Block the WebSocket URL using DevTools request blocking and reload: expect Polling fallback and public GET refreshes around every five seconds. Remove blocking: socket attempts back off 1/2/4/8/16/30 seconds and live state refreshes after reconnection. There should be no accumulating duplicate sockets/poll timers. Selected task detail also fetches the existing attempt endpoint when task status/attempt changes.
+
+Stop the master, inspect the UI error/last-snapshot notice, restart and confirm cleared in-memory state is reflected. Console must have no unhandled exceptions; transport errors during deliberate outages should be explained by UI status. CORS errors usually mean VITE_MASTER_URL and the exact frontend origin are mismatched. A working Swagger page alone does not prove browser CORS is configured.
+
+### P6-5: responsive/accessibility and production check
+
+Use browser responsive mode at approximately 390px and 1440px. Navigation, labels and primary actions should remain usable; tables may scroll horizontally. Keyboard-tab through navigation, upload, filters, task buttons and downloads: visible focus and accessible labels are required. Test loading/empty/error states at both widths. Capture screenshots of desktop overview, mobile navigation, tasks/detail and results. No screenshots or browser QA have been generated automatically in this implementation.
+
+In frontend CMD run npm test and npm run build. Expect test counts/exit statuses recorded independently from manual outcomes. The initial dependency tree has unresolved development-tool advisories (1 moderate, 2 critical) in Vitest/tinypool/mocker. A patched Vitest upgrade was attempted but registry DNS failed; review a compatible patched version, update package/lock together and rerun tests/build/npm audit when access is available. Do not claim the audit passed or expose test tooling publicly. Production build success does not erase development-tool advisories.
+
+### Separate two-laptop LAN dashboard scenario — NOT YET EXECUTED
+
+Use the trusted-network steps in section 5, with actual master IPv4 (example 192.168.1.10). Stop local processes first. On the master laptop:
+
+```bat
+set "CORS_ALLOWED_ORIGINS=http://192.168.1.10:5173"
+master\.venv\Scripts\python.exe -m uvicorn master.main:app --host 0.0.0.0 --port 8000
+```
+
+In a separate frontend CMD on that laptop:
+
+```bat
+cd /d C:\Users\daliy\Desktop\AdaptiveDistributedComputing\frontend
+set "VITE_MASTER_URL=http://192.168.1.10:8000"
+npm run dev -- --host 0.0.0.0
+```
+
+On laptop 2 open http://192.168.1.10:5173 and run its worker with MASTER_URL=http://192.168.1.10:8000 and a unique ID. Permit only the intended Private-network Python/Node ports when Windows asks; do not disable the firewall globally. Never use 127.0.0.1 as the remote destination or put 0.0.0.0 in VITE_MASTER_URL. Confirm the browser Origin exactly matches the master CORS list (no trailing slash). If frontend is hosted on a different laptop, use that frontend laptop's actual origin in the allowlist.
+
+Upload through the dashboard, observe both workers, interrupt/restart the remote worker and download completed output. No shared input directory should be needed. Capture devices/IPs, browser console/network evidence and task/attempt IDs. Do not claim LAN pass until actually executed. Stop exposed dev services afterward and return local binding to loopback.
+
+| ID | Phase 6 manual case | Pass/Fail/Blocked | Evidence / retest |
+| --- | --- | --- | --- |
+| P6-1 | Empty/loading/error/retained-snapshot states; real counts | | |
+| P6-2 | Multi-upload and all operation parameters/validation | | |
+| P6-3 | Created IDs, task filtering, details and retry history | | |
+| P6-4 | Worker resource/status/heartbeat and stale/null display | | |
+| P6-5 | Result preview/download/missing result; no local paths | | |
+| P6-6 | Read-only static/adaptive configuration and stored events | | |
+| P6-7 | Worker timeout/reassignment while dashboard stays open | | |
+| P6-8 | WebSocket disconnect/backoff/poll fallback; no duplicate subscriptions | | |
+| P6-9 | No worker credentials in frontend storage/events/public state | | |
+| P6-10 | Desktop/mobile keyboard accessibility and screenshots | | |
+| P6-11 | Build/tests and development dependency advisory follow-up | | |
+| P6-LAN | Browser + worker on second laptop; uploads/recovery/results | | |

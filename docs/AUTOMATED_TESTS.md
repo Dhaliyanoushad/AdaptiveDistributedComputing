@@ -1,4 +1,4 @@
-# Automated tests: Phases 1-3
+# Automated tests: Phases 1-6
 
 This is the inventory and execution guide, not a test result record. See [TEST_RESULTS.md](TEST_RESULTS.md) for observed runs and [TESTING_GUIDE.md](TESTING_GUIDE.md) for the teammate's pending manual checks.
 
@@ -36,7 +36,38 @@ This existing runner discovers the same master suites using a test-only polling 
 | `tests/test_worker.py` | 5 | Default registration, environment overrides, HTTP rejection/redirect handling, connection/timeout errors, invalid configuration; new polling loop mocked to retain focused Phase 1 tests |
 | `tests/test_worker_tasks.py` | 6 | Polling/no-task delay, execution delay and timeouts, start/completion requests, dummy simulated failure, rejected starts, clean interruption, communication failure and invalid timing configuration |
 | `tests/test_worker_images.py` | 8 | Pixel comparisons against OpenCV grayscale/resize/blur/edges, JPEG input, invalid images/parameters, mocked HTTP byte download/upload and reporting a processing failure |
-| **Total** | **48** | **29 master + 19 worker** |
+| `tests/test_master_monitoring.py` | 15 | Injected clocks, server receipt time, nullable/invalid/nonfinite metrics, session identity, offline reconnect, old task fencing, offline eligibility, background sweep, lifespan cleanup and concurrent heartbeat/task mutations |
+| `tests/test_worker_monitoring.py` | 9 | Nonblocking psutil samples, error/invalid sample handling, request payload/token/timeouts, periodic failure waiting, independent thread during blocked processing, rejection handling, main lifecycle/session propagation and configuration validation |
+| `tests/test_master_phase5.py` | 21 | Static/adaptive policies, metrics freshness and fallback, low RAM, fairness, history, no migration, concurrent recovery/polling, retries/limits, stale session/generation, legacy downgrade prevention and real image processor byte round trip after reassignment |
+| `tests/test_worker_phase5.py` | 4 | Assignment header propagation, network processing failure retry classification, permanent validation failure and no duplicate claim after poll connection failure |
+| `tests/test_master_dashboard.py` | 11 | Explicit CORS origins and preflight, denied/invalid origins, public credential-free snapshots, initial/changed/unchanged WebSocket frames, disconnection and network sends outside store lock |
+| **Python total** | **108** | **76 master + 32 worker** |
+
+## Phase 6 frontend tests
+
+In Windows CMD:
+
+```bat
+cd /d C:\Users\daliy\Desktop\AdaptiveDistributedComputing\frontend
+npm ci
+npm test
+npm run build
+npm audit
+```
+
+`npm ci` uses the committed package-lock. Run installation only when dependencies are missing/changed; the implementation's actual commands/results are recorded in TEST_RESULTS.md. The frontend uses React, Vite, TypeScript, Tailwind 3/PostCSS and Vitest/RTL with jsdom. No browser is launched by these tests.
+
+| Frontend suite | Methods | Coverage |
+| --- | ---: | --- |
+| `src/App.test.tsx` | 12 | Real-response-derived counts, loading/error/empty states, task filtering/all statuses, reassignment updates, attempt history/failure display, worker metrics/staleness, read-only scheduling, recorded retries and result URLs/missing images |
+| `src/UploadPanel.test.tsx` | 7 | File count/type/byte limits, decoded dimension limits, operation-specific parameters, file submission, tracking returned task IDs, API errors and empty submission |
+| `src/api.test.ts` | 4 | Actual endpoint names, credential-free public requests, error handling, multipart fields and encoded result URLs |
+| `src/useLiveDashboard.test.tsx` | 7 | Initial fetch/live events, five-second fallback, reconnect/refresh, retained snapshots on error, malformed events, superseded sockets and cleanup |
+| **Frontend total** | **30** | Mocked network + component tests |
+
+The test fixture module is imported only by tests; the application never imports or displays fabricated fixture statistics. Backend socket tests use fake WebSocket transport but execute the actual stream/snapshot code; CORS tests use the real middleware through ASGI. A live TCP/browser WebSocket connection, layout screenshots, CORS behavior in a real browser and LAN operation remain separate manual checks. Neither jsdom nor fake sockets establish those passes. All earlier image processor subprocess round trips remain in the Python regression command.
+
+The production build type-checks source and tests before bundling. A later build found four test queries using an unsupported RTL option; those were corrected without excluding tests from type checking. The installed development test dependency tree has unresolved audit findings recorded in TEST_RESULTS.md; the attempted upgrade was blocked by registry DNS access.
 
 ## What the round trip proves
 
@@ -48,4 +79,20 @@ This is an in-process HTTP-contract integration test with a real processor subpr
 
 There is no measured coverage percentage, load benchmark, hostile-input security audit or hardware interoperability certification. Existing tests cover selected size boundaries and failure cases, not every supported parameter combination or every image format variation. Animation rejection and the complete 20-file/16-million-pixel boundaries should also receive manual review; do not infer exhaustive coverage from the inventory.
 
-For every future phase: add meaningful tests, run both relevant earlier-phase regressions and new tests, fix introduced failures, and update all three testing documents. Record failed or blocked runs honestly. A blank manual checklist is never evidence of a pass. Application state recovery, heartbeat, adaptive scheduling, database and frontend tests belong to later authorized phases.
+For every future phase: add meaningful tests, run both relevant earlier-phase regressions and new tests, fix introduced failures, and update all three testing documents. Record failed or blocked runs honestly. A blank manual checklist is never evidence of a pass. Application state recovery, adaptive scheduling, database and frontend tests belong to later authorized phases.
+
+## Phase 4 regression details
+
+Commands remain unchanged and include both new monitoring files. Test clocks advance explicitly; timeout tests do not sleep for ten real seconds. Master lifespan tests enter/exit the actual lifespan context, asserting the sweeper starts and is cancelled. The thread test uses events and bounded waits to verify heartbeat progress while a separate processing action is blocked; it is not a CPU load benchmark or live HTTP run. Existing image ASGI/processor round trips still run for all four operations.
+
+Phase 1 list assertions now compare retained worker_id/hostname fields because GET workers adds monitoring fields; Phase 4 tests validate the complete record. The registration request test now expects the explicit session-v1 protocol header. The image ASGI test helper accepts optional headers for session tests. These adaptations preserve the original regression intent rather than dropping earlier tests.
+
+Session-aware task and image requests are fenced against rotated tokens and previous task-session generations. Legacy requests remain supported only with their earlier trust assumptions; legacy IDs cannot reconnect. No load-adaptive scheduling, retry or task recovery is tested or implemented. Live TCP, hardware load variation and LAN cases remain manual verification work.
+
+## Phase 5 regression details (supersedes Phase 4 no-recovery statements)
+
+The same full-suite commands discover the new Phase 5 files. Static mode stays the default and all earlier tests remain. Three Phase 4 tests were adapted to supply assignment credentials. The earlier no-recovery test retains its method but now asserts a newly counted assignment after reconnect while old-session and missing-generation updates remain rejected; this is an intentional Phase 5 behavior change, not removal of the ownership regression.
+
+Unit tests use injected clocks and controlled resource samples. Recovery concurrency tests repeat simultaneous sweeps and polling without long timeout sleeps. Worker tests check generation header propagation and transient/permanent error reports. An ASGI image recovery test performs multipart input upload, running-worker timeout, assignment to another worker, original-byte download, real processing in the worker interpreter, rejected stale upload, accepted new upload, repeated completion and byte-identical result download. This adds recovery integration coverage without claiming live TCP or LAN execution. Existing tests still exercise all image operations.
+
+Observed results are in TEST_RESULTS.md. No throughput/speedup benchmark, live hardware-load experiment or teammate manual test was performed. Timing history is an input to a policy, not proof of better performance.

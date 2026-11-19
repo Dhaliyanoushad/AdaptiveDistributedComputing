@@ -10,6 +10,17 @@ from urllib.parse import quote, urlsplit
 import requests
 
 REQUEST_TIMEOUT = (3.05, 10)
+SESSION_TOKEN = None
+ASSIGNMENT_TOKEN = None
+
+
+def session_headers() -> dict:
+    if not SESSION_TOKEN:
+        return {}
+    headers = {"X-Worker-Session": SESSION_TOKEN}
+    if ASSIGNMENT_TOKEN:
+        headers['X-Task-Assignment'] = ASSIGNMENT_TOKEN
+    return {"headers": headers}
 
 
 def execute_image(master_url: str, task: dict, worker_id: str) -> None:
@@ -20,7 +31,7 @@ def execute_image(master_url: str, task: dict, worker_id: str) -> None:
         from image_processing import process_image, MAX_BYTES
     task_url = f"{master_url}/tasks/{quote(task['task_id'], safe='')}"
     with requests.get(f"{task_url}/input", params={"worker_id": worker_id},
-                      timeout=REQUEST_TIMEOUT, stream=True, allow_redirects=False) as response:
+                      timeout=REQUEST_TIMEOUT, stream=True, allow_redirects=False, **session_headers()) as response:
         if response.status_code != 200:
             raise ValueError(f"Image download failed: HTTP {response.status_code}")
         data = bytearray()
@@ -31,27 +42,31 @@ def execute_image(master_url: str, task: dict, worker_id: str) -> None:
     output = process_image(bytes(data), task["operation"], task["payload"]["parameters"])
     response = requests.post(f"{task_url}/result", data={"worker_id": worker_id},
                              files={"file": ("result.png", output, "image/png")},
-                             timeout=REQUEST_TIMEOUT, allow_redirects=False)
+                             timeout=REQUEST_TIMEOUT, allow_redirects=False, **session_headers())
     if response.status_code != 200:
         raise ValueError(f"Result upload failed: HTTP {response.status_code}: {response.text[:200]}")
 
 
 def post_update(url: str, payload: dict, expected_status: int = 200) -> requests.Response:
-    response = requests.post(url, json=payload, timeout=REQUEST_TIMEOUT, allow_redirects=False)
+    response = requests.post(url, json=payload, timeout=REQUEST_TIMEOUT, allow_redirects=False, **session_headers())
     if response.status_code != expected_status:
         raise ValueError(f"HTTP {response.status_code}: {response.text[:500]}")
     return response
 
 
 def run_worker(master_url: str, worker_id: str, poll_interval: float, task_delay: float) -> int:
+    global ASSIGNMENT_TOKEN
     """No retry, recovery or heartbeat: communication failure stops the worker."""
     poll_url = f"{master_url}/workers/{quote(worker_id, safe='')}/next-task"
     while True:
+        ASSIGNMENT_TOKEN = None
         response = post_update(poll_url, {})
-        task = response.json()["task"]
+        reply = response.json()
+        task = reply["task"]
         if task is None:
             time.sleep(poll_interval)
             continue
+        ASSIGNMENT_TOKEN = reply.get('assignment_token')
         task_id = task["task_id"]
         task_url = f"{master_url}/tasks/{quote(task_id, safe='')}"
         identity = {"worker_id": worker_id}
@@ -61,7 +76,8 @@ def run_worker(master_url: str, worker_id: str, poll_interval: float, task_delay
             try:
                 execute_image(master_url, task, worker_id)
             except (ValueError, OSError, KeyError) as exc:
-                post_update(f"{task_url}/fail", {**identity, "error": str(exc)[:500] or "Image processing failed"})
+                post_update(f"{task_url}/fail", {**identity, "error": str(exc)[:500] or "Image processing failed",
+                    "retryable": isinstance(exc, (requests.RequestException, OSError))})
                 print(f"Task {task_id}: failed: {exc}", flush=True)
             else:
                 print(f"Task {task_id}: image completed", flush=True)
@@ -69,7 +85,8 @@ def run_worker(master_url: str, worker_id: str, poll_interval: float, task_delay
         time.sleep(task_delay)
         # Dummy tasks never execute payload contents as code or commands.
         if task["operation"] != "dummy" or task["payload"].get("fail") is True:
-            post_update(f"{task_url}/fail", {**identity, "error": "Simulated dummy-task failure"})
+            post_update(f"{task_url}/fail", {**identity, "error": "Simulated dummy-task failure",
+                "retryable": task["payload"].get('retryable') is True})
             print(f"Task {task_id}: failed (simulated)", flush=True)
         else:
             post_update(f"{task_url}/complete", identity)
@@ -77,6 +94,9 @@ def run_worker(master_url: str, worker_id: str, poll_interval: float, task_delay
 
 
 def main() -> int:
+    global SESSION_TOKEN, ASSIGNMENT_TOKEN
+    SESSION_TOKEN = None
+    ASSIGNMENT_TOKEN = None
     master_url = os.environ.get("MASTER_URL", "http://127.0.0.1:8000").strip().rstrip("/")
     try:
         parsed = urlsplit(master_url)
@@ -88,6 +108,10 @@ def main() -> int:
             raise ValueError("WORKER_ID must not be empty")
         poll_interval = float(os.environ.get("POLL_INTERVAL", "1"))
         task_delay = float(os.environ.get("TASK_DELAY", "0.5"))
+        heartbeat_interval = float(os.environ.get("HEARTBEAT_INTERVAL", "3"))
+        heartbeat_timeout = float(os.environ.get("HEARTBEAT_HTTP_TIMEOUT", "2"))
+        if any(not math.isfinite(value) or value <= 0 for value in [heartbeat_interval, heartbeat_timeout]):
+            raise ValueError("Heartbeat interval and timeout must be finite and greater than zero")
         if not math.isfinite(poll_interval) or poll_interval <= 0:
             raise ValueError("POLL_INTERVAL must be finite and greater than zero")
         if not math.isfinite(task_delay) or task_delay < 0:
@@ -102,6 +126,7 @@ def main() -> int:
             json={"worker_id": worker_id, "hostname": hostname},
             timeout=REQUEST_TIMEOUT,
             allow_redirects=False,
+            headers={"X-Worker-Protocol": "session-v1"},
         )
         if response.status_code != 201:
             print(
@@ -114,10 +139,21 @@ def main() -> int:
         return 1
 
     print(f"Registration successful: worker_id={worker_id!r}, hostname={hostname!r}", flush=True)
+    token = response.headers.get("X-Worker-Session")
+    SESSION_TOKEN = token if isinstance(token, str) and token else None
     try:
+        if SESSION_TOKEN:
+            try:
+                from worker.monitoring import HeartbeatSender
+            except ModuleNotFoundError:
+                from monitoring import HeartbeatSender
+            with HeartbeatSender(master_url, worker_id, SESSION_TOKEN, heartbeat_interval,
+                                 (heartbeat_timeout, heartbeat_timeout)):
+                return run_worker(master_url, worker_id, poll_interval, task_delay)
+        # Compatibility with a Phase 1-3 master; no session-safe reconnection.
         return run_worker(master_url, worker_id, poll_interval, task_delay)
     except KeyboardInterrupt:
-        print("Worker stopped. Reconnection is not supported; unfinished tasks remain assigned/running.")
+        print("Worker stopped. Wait for offline status before reconnecting; the master recovers eligible unfinished attempts.")
         return 0
     except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
         print(f"Worker stopped after task communication failure: {type(exc).__name__}: {exc}", file=sys.stderr)

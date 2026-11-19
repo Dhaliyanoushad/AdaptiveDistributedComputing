@@ -1,5 +1,76 @@
 # Test results
 
+## Phase 6 final regression — 2026-11-19
+
+| Command | Passed | Failed | Errors | Skipped | Actual result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Master `python tests/run_master_tests.py` in its existing environment | 76 | 0 | 0 | 0 | Exit 0; 6.411 seconds; includes all prior regressions and 11 dashboard cases |
+| Worker `python -m unittest discover -s tests -p "test_worker*.py" -q` in its existing environment | 32 | 0 | 0 | 0 | Exit 0; 0.259 seconds |
+| Frontend `npm test` | 30 | 0 | 0 | 0 | Four Vitest files passed; 5.79 seconds; mocked HTTP/WebSocket + jsdom |
+| **Latest unique tests** | **138** | **0** | **0** | **0** | 108 Python + 30 frontend |
+
+The commands above ran from repository root for Python and frontend/ for npm. Existing Python image subprocess round trips (including recovery) ran as part of master regressions. CORS middleware was exercised through ASGI; stream tests used fake WebSocket transport and actual public snapshot/stream code. They checked origin policy, changed/unchanged state, disconnection, credential exclusion and lock release before sending.
+
+Additional executed checks:
+
+- `npm run build`: TypeScript check and Vite production bundling passed; generated frontend/dist is ignored. Final artifacts: CSS approximately 22.56 kB, JS approximately 244.01 kB (filenames may change with content). This is build output size, not a runtime performance claim.
+- Master and worker `pip check`: both passed, no broken requirements.
+- `npm audit --json`: **failed audit**, 1 moderate + 2 critical findings in the development Vitest/@vitest/mocker/tinypool tree. These findings are unresolved.
+- `npm audit --omit=dev`: exit 0, **0 production-dependency vulnerabilities reported**. This does not clear the full development-tree audit.
+- `npm install --save-dev vitest@4.1.12 --fetch-retries=0 --fetch-timeout=20000`: failed with registry DNS `ENOTFOUND`; no patched version was installed. A registry metadata lookup also failed. Keep this as an explicit development-tool maintenance blocker, not a successful remediation.
+
+Development history (not additional unique passes): initial npm install succeeded with 226 packages and the audit findings above. Initial frontend tests passed 27 cases; later suites expanded to 30. An intermediate production build failed on four unsupported `exact` options in RTL role queries; the test source was corrected, and later full type-check/build passed without excluding tests. Initial Python dashboard run passed 75 master and 32 worker methods; the final master suite added a lock-release test for 76.
+
+Live verification limits: Vite dev server launched and printed localhost:5173 ready. A direct Python HTTP readiness request then failed with **WinError 10013 (socket access forbidden)**. Uvicorn launch produced no ready output and was stopped. Both owned server sessions were stopped. No successful live dashboard HTTP integration, real browser, screenshots, visual acceptance or two-laptop LAN run is claimed. Browser console, responsive layout, actual WebSocket reconnect behavior and LAN/firewall checks remain pending teammate cases. Detailed manual Pass/Fail cells remain blank.
+
+No scheduling/recovery algorithm was changed in Phase 6. No database, benchmarking or Phase 7 functionality was introduced. Remaining issues include the unresolved development-tool advisories and blocked live/browser verification; existing in-memory persistence/authentication limitations remain.
+
+## Phase 5 final regression — 2026-11-19
+
+| Command | Passed | Failed | Errors | Skipped | Actual result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `master\.venv\Scripts\python.exe tests\run_master_tests.py` | 65 | 0 | 0 | 0 | Exit 0; 5.542 seconds; OK |
+| `worker\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_worker*.py" -q` | 32 | 0 | 0 | 0 | Exit 0; 0.256 seconds; OK |
+| **Latest full suite** | **97** | **0** | **0** | **0** | All earlier-phase tests plus Phase 5 |
+
+Both existing environments' `pip check` passed with `No broken requirements found.` No new package dependencies were added. `git diff --check` passed, with normal Windows line-ending warnings.
+
+Earlier Phase 5 development runs, retained as history rather than added pass counts:
+
+- First compatibility run: master 44 methods, 41 passed and 3 errors (0 assertion failures). The session-aware Phase 4 fixtures omitted the newly required assignment token. Worker 28 passed.
+- Updated session fixtures and expanded scheduler/recovery run: master 64 passed, worker 28 passed. The earlier no-recovery expectation was updated for a new counted assignment while preserving stale-owner rejection.
+- Final expanded run: 65 master and 32 worker passed as recorded above. No failed or skipped methods remain in that run.
+
+Verified: static baseline, controlled low/high CPU/RAM selection, missing/stale metrics and cold start, RAM threshold, session eligibility, busy/offline exclusion, fairness, processing history, no running migration, assigned/running timeout recovery, concurrent recovery/claim deduplication, pending preservation, retry budget/permanent failure, session and assignment fencing, legacy retry downgrade protection and idempotent completion. The new image ASGI test transferred original bytes after reassignment, invoked real OpenCV processing in the worker interpreter and confirmed stale results could not alter the one accepted output. Earlier all-operation image tests also ran.
+
+Limits: master tests use the existing socket-free ASGI runner. No live TCP, manual, two-laptop LAN, sustained hardware-load or performance benchmark run was performed for Phase 5. Manual checklist cells remain blank. No adaptive speedup is claimed. Persistence after master restart remains unsupported. Legacy clients have no secure retry capability; an offline legacy attempt fails terminally. Adaptive cold/stale-metric fallback is a policy choice, not evidence of available RAM. Heartbeating but permanently hung work has no independent task execution deadline in this phase.
+
+## Phase 4 final regression — 2026-11-19
+
+Latest observed full-suite results (earlier records below remain historical):
+
+| Command | Passed | Failed | Errors | Skipped | Observed result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `master\.venv\Scripts\python.exe tests\run_master_tests.py` | 44 | 0 | 0 | 0 | Exit 0; 5.673 seconds; OK |
+| `worker\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_worker*.py" -q` | 28 | 0 | 0 | 0 | Exit 0; 0.322 seconds; OK |
+| **Latest full suite** | **72** | **0** | **0** | **0** | Includes all Phase 1-3 regressions and 24 Phase 4 methods |
+
+Both environments' `pip check` commands returned `No broken requirements found.` No dependencies were added for Phase 4. `git diff --check` returned no whitespace errors, with normal Windows line-ending warnings.
+
+Phase 4 development-run history, not additional unique test coverage:
+
+- Adapted earlier-phase regression run: 29 master passed and 19 worker passed.
+- First monitoring suites: 42 master passed and 26 worker passed.
+- Expanded suites: 44 master passed; worker ran 28 with 27 passing and 1 error. The new lifecycle/session-header test reused a registration mock with HTTP 201 for a task update expecting 200. The mock was corrected; no production workaround was introduced.
+- Worker rerun after fixture correction: 28 passed, 0 failures/errors (0.229 seconds).
+- Final full rerun is recorded in the table above. Expected negative-test warning messages about unavailable metrics, invalid settings and heartbeat failure are not suite failures.
+
+Verified scenarios include injected monotonic/UTC clocks, timeout boundary, independent periodic sweep without GET, actual lifespan startup/cancellation, online duplicate rejection, offline session rotation, stale token/task-session fencing, nullable/invalid metrics, concurrency, nonblocking psutil calls, bounded heartbeat waits and thread shutdown. A synchronized thread test checks heartbeat progress while a processing action is blocked; it is not a long-duration real-image stress test. Existing ASGI image byte round trips still invoke the real worker image processor for all four operations.
+
+No live TCP, teammate visual/manual acceptance or two-laptop LAN test was performed for Phase 4. The existing in-process runner avoids the previously observed Windows socketpair restriction; standard network-based master discovery/serving was not rerun here. Manual checklist cells remain blank.
+
+Remaining product limits: legacy registrations retain trusted-network identity semantics and cannot reconnect; session tokens fence modern reconnects but do not authenticate initial enrollment. Old assigned/running tasks remain stuck and keep the worker ID busy after reconnect; no retry, requeue or recovery exists. Metadata is in memory. Heartbeat shutdown is bounded/best effort around HTTP timeouts; DNS/OS stalls may outlast Requests timeouts. Live hardware metrics/latency and LAN behavior remain for the teammate. No Phase 5 functionality was implemented.
+
 ## Actual automated rerun — 2026-11-19
 
 Executed from the existing Windows repository using separate master and worker virtual environments. Both interpreters reported **Python 3.13.2**. These results describe this run only; no changes to application behavior or tests were made for this documentation task.

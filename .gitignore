@@ -17,6 +17,7 @@ htmlcov/
 node_modules/
 frontend/dist/
 .vite/
+*.tsbuildinfo
 
 # Local configuration and secrets
 .env

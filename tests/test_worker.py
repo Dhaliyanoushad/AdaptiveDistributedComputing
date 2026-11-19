@@ -34,6 +34,7 @@ class WorkerTests(unittest.TestCase):
             "http://127.0.0.1:8000/workers/register",
             json={"worker_id": "local-host", "hostname": "local-host"},
             timeout=(3.05, 10), allow_redirects=False,
+            headers={"X-Worker-Protocol": "session-v1"},
         )
         self.assertIn("Registration successful", self.stdout.getvalue())
 

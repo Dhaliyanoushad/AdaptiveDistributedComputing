@@ -1,0 +1,7 @@
+import {afterEach,it,expect,vi} from 'vitest'
+import {request,fetchSnapshot,uploadImages,resultUrl} from './api'
+afterEach(()=>vi.unstubAllGlobals())
+it('fetches existing public endpoints without worker credentials',async()=>{const fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>[]});vi.stubGlobal('fetch',fetch);await fetchSnapshot();expect(fetch.mock.calls.map(call=>call[0])).toEqual(expect.arrayContaining([expect.stringContaining('/workers'),expect.stringContaining('/tasks'),expect.stringContaining('/scheduler')]));expect(fetch.mock.calls.every(call=>call[1].credentials==='omit'&&!call[1].headers)).toBe(true)})
+it('surfaces API validation errors',async()=>{vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:false,status:422,json:async()=>({detail:'Invalid dimensions'})}));await expect(request('/images/tasks')).rejects.toThrow('HTTP 422: Invalid dimensions')})
+it('uploads multipart images with actual field names',async()=>{const fetch=vi.fn().mockResolvedValue({ok:true,json:async()=>[]});vi.stubGlobal('fetch',fetch);const file=new File(['x'],'x.png',{type:'image/png'});await uploadImages([file],'resize',{width:20,height:10});const body=fetch.mock.calls[0][1].body as FormData;expect(body.get('files')).toBe(file);expect(body.get('operation')).toBe('resize');expect(body.get('params')).toBe('{"width":20,"height":10}')})
+it('encodes task IDs and uses HTTP result downloads',()=>{expect(resultUrl('a/b',true)).toContain('/tasks/a%2Fb/result/download')})
