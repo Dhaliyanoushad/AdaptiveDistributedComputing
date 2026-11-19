@@ -1,4 +1,4 @@
-# Consolidated teammate testing guide — Phases 1–8
+# Consolidated teammate testing guide — Phases 1–9
 
 ## Current handoff entry point and evidence status
 
@@ -823,3 +823,99 @@ Run npm audit and npm audit --omit=dev separately. Full dev audit currently has 
 | P8-5 | Read-only socket diagnosis, audit and security review | | |
 
 No teammate case is marked Pass. Automated/programmatic checks and manual acceptance are separate categories. Append actual results to TEST_RESULTS.md only after execution, with the template and evidence links.
+
+## Phase 9 — UI clarity and complete preservation (NOT YET EXECUTED)
+
+All Phase 1–8 cases above remain required. Historical navigation names Overview and Image processing now appear as Dashboard and Process Images; the other four destinations and underlying APIs are unchanged. There is no new Benchmarks page/API. Use the existing standalone Phase 7 report workflow. A heading or expected response below is not an observed result.
+
+### Prerequisites and exact Windows CMD commands
+
+Open CMD in the repository. If using a different location, replace only the cd path. First record revision/environment and run automated verification:
+
+```bat
+cd /d C:\Users\daliy\Desktop\AdaptiveDistributedComputing
+git rev-parse HEAD
+python --version
+node --version
+npm --version
+scripts\test_all.cmd
+```
+
+If dependencies/environments are missing, use scripts\setup.cmd as described earlier; clean-machine installation is still pending. Use four independent CMD terminals, each in the repository:
+
+```bat
+rem Terminal 1: one Master, static baseline
+set "SCHEDULER_MODE=static"
+set "WORKER_TIMEOUT=10"
+set "TIMEOUT_CHECK_INTERVAL=1"
+scripts\start_master.cmd
+```
+
+```bat
+rem Terminal 2
+set "WORKER_ID=worker-1"
+set "HEARTBEAT_INTERVAL=3"
+scripts\start_worker.cmd
+```
+
+```bat
+rem Terminal 3
+set "WORKER_ID=worker-2"
+set "HEARTBEAT_INTERVAL=3"
+scripts\start_worker.cmd
+```
+
+```bat
+rem Terminal 4
+scripts\start_frontend.cmd
+```
+
+Open http://127.0.0.1:5173 and http://127.0.0.1:8000/docs. In a fifth CMD, compare public state with the browser:
+
+```bat
+curl.exe -i http://127.0.0.1:8000/health
+curl.exe -s http://127.0.0.1:8000/workers
+curl.exe -s http://127.0.0.1:8000/tasks
+curl.exe -s http://127.0.0.1:8000/scheduler
+scripts\benchmark_report.cmd --help
+```
+
+Expected health: HTTP 200, {"status":"ok"}. Workers is an array containing the two IDs, hostname, status, last_seen and latest metrics (null is allowed on collection error), with no tokens. Tasks is the real registry array. Scheduler reports configuration, pending_count and per-Worker load/history/fairness. Report --help describes the existing source/output arguments without running experiments. If networking fails, mark affected cases Blocked with the exact error; a non-serving --check is not a substitute.
+
+### Case actions and expected results
+
+| ID | Actions | Expected result | Pass | Fail | Blocked | Evidence/defect |
+| --- | --- | --- | --- | --- | --- | --- |
+| P9-01 Language/navigation | Visit all six navigation buttons and return to Dashboard. Read headings, connection state and counts. | Dashboard, Process Images, Workers, Tasks, Results, Scheduling; active button is clear. Familiar technical terms remain. Counts match API data. No decorative phase label or invented statistics. | | | | |
+| P9-02 Upload instructions | In Process Images choose two nonprivate JPG/PNG files. Select every operation in turn before submission. | Three-step instructions, limits, selection count/size and a short description. Grayscale has no parameters; Resize width/height; Gaussian Blur odd kernel; Edge Detection low/high thresholds. Values/defaults and schema match earlier cases. | | | | |
+| P9-03 Upload/track/output | Submit separate batches for all four operations. Record IDs, click Track, inspect Tasks and Results, Preview and Download PNG. | Submission activity is visible for long enough uploads; returned IDs appear only after acceptance. Message says queued, not necessarily complete. One Task per image; actual states progress. All earlier image/dimension/visual/download cases pass. No originals exposed. | | | | |
+| P9-04 Validation/errors | Submit no files, unsupported/corrupt files and invalid operation parameters using earlier negative cases; interrupt Master connection separately. | Clear validation/API errors; no false success; valid later submission still works. Connection error retains and identifies last data or shows an honest empty loading state. | | | | |
+| P9-05 Worker monitoring | Visit Workers and compare /workers and /scheduler. Observe heartbeat changes; stop worker-1 and wait beyond timeout plus sweep. | Hostname, Online/Offline badge, CPU/RAM bars, Available RAM in MiB, actual Active Tasks (0/1 currently), Last Heartbeat. Missing values are Unavailable; stale/offline metrics marked as last reported values. | | | | |
+| P9-06 Task tracking | Search by Task ID, raw operation and Worker ID; use every status filter; open details and close them. | All five states, correct filtered count/empty state, ownership, dates, error, count and complete attempt history remain available. Details explain the current state. | | | | |
+| P9-07 Retry explanation | Execute earlier Phase 5 controlled interruption case with modern Workers and observable unfinished work. Inspect task details and Scheduling events before/after recovery. | Original ID retained, timeout reason and each assignment visible. Text says a retry was requested, not that recovery succeeded. Actual current state/attempt/Worker establishes reassignment or completion; exhausted budget remains failed. Repeat stale-result and duplicate completion cases from earlier phases. | | | | |
+| P9-08 Scheduling/report guidance | Inspect static view. Stop owned processes; start fresh Master with SCHEDULER_MODE=adaptive, restart both Workers, inspect again. Open configuration details and Benchmark reports guidance. | Static/Adaptive Scheduling explanations and every real config/load/history value remain. No runtime mode toggle. Report definitions match Phase 7; CSV/JSON/Markdown/SVG remain files, no fake results/charts or claim adaptive is faster. --help does not produce experiments. | | | | |
+| P9-09 Responsive layout | At desktop, tablet and 360px phone width visit every destination; use long Task/Worker IDs and real results. | Readable panels and controls, wrapped navigation/headings, single-column small-screen statistics. Task table scrolls horizontally within its region; the rest of the page does not overflow. Capture screenshots at each width. | | | | |
+| P9-10 Keyboard/accessibility | Use Tab/Shift+Tab, Enter/Space to navigate, upload, change filters, open/close details and technical configuration. Focus table region and use arrow keys; inspect labels with browser accessibility tools. | Visible focus, named controls and metric bars, keyboard-operable buttons/details/links/table scrolling, readable contrast/zoom and image alt text. Status is expressed in text as well as color. Record accessibility issues; automated component tests are not an accessibility audit. | | | | |
+| P9-11 Full preservation | Execute all earlier Phase 1–8 cases, FEATURE_CHECKLIST.md and the full automated command. Compare API responses and image results; retain failing evidence. | Registration/session/assignment/security/recovery, image operations, WebSocket/reconnection/polling, standalone benchmark validity/exports, scripts and existing variables retain prior behavior. No required feature omitted. | | | | |
+| P9-12 Future LAN | Follow TWO_LAPTOP_SETUP.md and earlier LAN cases on two physical laptops; use the actual Master IPv4 and explicit origins. Repeat P9-03/05/07. | Real transfer, metrics, timeout/retry and results agree between devices. No policy/firewall change is assumed. Record laptop/network details. This case is NOT YET EXECUTED. | | | | |
+
+To select Adaptive Scheduling, stop only owned processes and use the following in the Master CMD before restarting, then restart both Workers because metadata/session state was lost:
+
+```bat
+set "SCHEDULER_MODE=adaptive"
+scripts\start_master.cmd
+```
+
+Use the existing Phase 5 dummy-task delay/recovery procedure when images finish too quickly; a task that already completed does not verify recovery. Restore SCHEDULER_MODE=static for baseline tests. A restart loses in-memory metadata even if output PNGs remain on disk.
+
+### Troubleshooting and recording
+
+- If WinError 10013 or socket restrictions occur, retain stderr and use TWO_LAPTOP_SETUP.md diagnostics on the normal account. Do not disable security or claim live checks passed from ASGI results.
+- If a restarted Worker gets 409, wait until its previous identity is offline. A second online identity must not take it over. If Master restarted, restart Workers to register again.
+- A null CPU/RAM value is a failed/missing sample, not zero. Available RAM is binary MiB despite the historical API suffix _mb.
+- If a Task is pending, inspect eligible online idle Workers, RAM/freshness and configured mode. Recorded retry does not mean another Worker is currently available. No UI switch can change startup configuration.
+- If a result preview fails, inspect the Task/result HTTP response and Master connection. Restarting loses metadata; old files are not automatically restored.
+- If no benchmark reports exist, label experiments pending. Run the Phase 7 workflow later; never substitute seeded test fixtures for measurements.
+- npm development advisories remain 1 moderate/2 critical from the recorded audit; tests/build do not resolve them. No dependency remediation was attempted in Phase 9.
+
+All outcome cells remain blank. For each executed case fill TEST_EXECUTION_TEMPLATE.md with date, tester, revision, actual actions/responses, screenshots/logs, outcome, defect and retest. Append real observations to TEST_RESULTS.md. Clean-machine, browser/mobile, two-laptop LAN and actual benchmark acceptance remain NOT YET EXECUTED.

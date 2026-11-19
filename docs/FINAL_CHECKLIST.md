@@ -42,3 +42,19 @@ Consult TEST_RESULTS.md for current actual counts and outputs/verification/UUID 
 - Structural output validation and whole-host metrics are not trust/performance proofs. No real benchmark improvement is claimed.
 
 **Handoff status:** source and automated workflow are prepared for teammate manual testing on a normal configured Windows environment. Unrestricted clean installation/live browser/LAN/performance acceptance are not certified, and development-tool advisories remain unresolved. No additional phase is implemented.
+
+## Phase 9 clarity handoff
+
+- [x] Six existing destinations preserved with clearer navigation and upload instructions.
+- [x] Worker metrics/active load/heartbeat, task states/history/retry reasons and result actions retained with honest missing/stale/failure wording.
+- [x] Scheduling configuration remains visible and read-only; benchmark guidance identifies standalone reports and makes no performance claim.
+- [x] Readability helpers extracted for UI and image decode/operation/encode; API, policy, security, formula, configuration and CMD implementations preserved.
+- [x] CODE_WALKTHROUGH.md and FEATURE_CHECKLIST.md created; README, AGENTS and all three testing documents/demo/checklist updated.
+- [x] Baseline before edits: 173 passed. Final scripts/test_all.cmd: 185 passed, zero failures/errors/skips; production build, both dependency checks and all launcher checks passed. Actual log IDs and the corrected development-test failure are recorded in TEST_RESULTS.md.
+- [ ] Execute Phase 9 P9-01–12 UI/language, keyboard, responsive and full-preservation checks; all remain NOT YET EXECUTED.
+- [ ] Complete every prior Phase 1–8 teammate manual case and retain actual evidence.
+- [ ] Resolve/validate restricted live TCP WinError 10013 on normal target environment.
+- [ ] Remediate the recorded 1 moderate/2 critical npm development advisories with compatible updates and rerun verification/audit.
+- [ ] Complete clean-machine installation, browser testing, two-laptop LAN and real benchmark experiments.
+
+No new endpoints, dependencies, runtime scheduler toggle, database, ML or later phase features were introduced. State persistence and trusted-LAN security limitations remain unchanged. Use scripts\test_all.cmd for automated reruns and TESTING_GUIDE.md for exact separate-terminal CMD startup and blank Pass/Fail/Blocked acceptance fields.

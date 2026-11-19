@@ -30,3 +30,33 @@ it('submits real files and tracks returned tasks without claiming completion',as
 it('shows API upload errors',async()=>{vi.mocked(uploadImages).mockRejectedValue(new Error('HTTP 422: Invalid image'));render(<UploadPanel onTrack={vi.fn()}/>);fireEvent.change(screen.getByLabelText('Image files'),{target:{files:[new File(['x'],'x.png',{type:'image/png'})]}});fireEvent.click(screen.getByRole('button',{name:'Submit image tasks'}));expect(await screen.findByRole('alert')).toHaveTextContent('HTTP 422')})
 it('prevents an empty submission',async()=>{render(<UploadPanel onTrack={vi.fn()}/>);fireEvent.click(screen.getByRole('button',{name:'Submit image tasks'}));await waitFor(()=>expect(screen.getByRole('alert')).toHaveTextContent('Select between'));expect(uploadImages).not.toHaveBeenCalled()})
 it('rejects decoded dimensions beyond backend limits',async()=>{vi.stubGlobal('Image',class {width=4097;height=1;onload:(()=>void)|null=null;set src(_value:string){queueMicrotask(()=>this.onload?.())}});render(<UploadPanel onTrack={vi.fn()}/>);fireEvent.change(screen.getByLabelText('Image files'),{target:{files:[new File(['x'],'x.png',{type:'image/png'})]}});fireEvent.click(screen.getByRole('button',{name:'Submit image tasks'}));expect(await screen.findByRole('alert')).toHaveTextContent('4096 pixels');expect(uploadImages).not.toHaveBeenCalled()})
+
+it('shows beginner instructions and descriptions for all four existing operations', () => {
+ render(<UploadPanel onTrack={vi.fn()} />)
+ expect(screen.getByText(/1. Select JPG or PNG images/)).toBeInTheDocument()
+ expect(screen.getByText('Convert each image to shades of gray.')).toBeInTheDocument()
+ for (const [operation, description] of [
+  ['resize', 'Change each image to the width and height you choose.'],
+  ['gaussian_blur', 'Soften detail using an odd-sized Gaussian kernel.'],
+  ['edge_detection', 'Find image edges using low and high thresholds.'],
+ ]) {
+  fireEvent.change(screen.getByLabelText('Operation'), {target: {value: operation}})
+  expect(screen.getByText(description)).toBeInTheDocument()
+ }
+ expect(screen.queryByLabelText('Width (pixels)')).not.toBeInTheDocument()
+ expect(screen.queryByLabelText('Kernel size (odd)')).not.toBeInTheDocument()
+})
+it('shows submission activity and preserves resize parameter schema', async () => {
+ let finish!: (value: typeof taskFixture[]) => void
+ vi.mocked(uploadImages).mockReturnValue(new Promise(resolve => {finish = resolve}))
+ render(<UploadPanel onTrack={vi.fn()} />)
+ const file = new File(['png'], 'x.png', {type: 'image/png'})
+ fireEvent.change(screen.getByLabelText('Image files'), {target: {files: [file]}})
+ fireEvent.change(screen.getByLabelText('Operation'), {target: {value: 'resize'}})
+ fireEvent.click(screen.getByRole('button', {name: 'Submit image tasks'}))
+ await waitFor(() => expect(uploadImages).toHaveBeenCalledWith([file], 'resize', {width: 640, height: 480}))
+ expect(screen.getByText(/Task IDs appear after the Master accepts/)).toBeInTheDocument()
+ expect(screen.getByRole('button', {name: 'Validating and uploading…'})).toBeDisabled()
+ finish([taskFixture])
+ await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('not necessarily complete'))
+})

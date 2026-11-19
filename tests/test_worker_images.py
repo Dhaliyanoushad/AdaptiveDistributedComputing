@@ -67,3 +67,34 @@ class ImageOperationTests(unittest.TestCase):
                 test_worker.worker.run_worker('http://master', 'a', 1, 0)
         self.assertTrue(post.call_args_list[2].args[0].endswith('/fail'))
         self.assertEqual(post.call_args_list[2].kwargs['json']['error'], 'decode failed')
+
+
+class ImagePipelinePreservationTests(unittest.TestCase):
+    setUp = ImageOperationTests.setUp
+    # Added boundary checks use the same public entry point as real Workers.
+    def test_boolean_and_boundary_parameters_remain_invalid(self):
+        cases = [
+            ('resize', {'width': True, 'height': 8}),
+            ('resize', {'width': 4096, 'height': 4096}),
+            ('gaussian_blur', {'kernel_size': True}),
+            ('gaussian_blur', {'kernel_size': 101}),
+            ('edge_detection', {'threshold1': -1, 'threshold2': 200}),
+            ('edge_detection', {'threshold1': 0, 'threshold2': 256}),
+        ]
+        for operation, parameters in cases:
+            with self.subTest(operation=operation, parameters=parameters):
+                with self.assertRaises(ValueError):
+                    process_image(self.data, operation, parameters)
+
+    def test_opencv_error_is_still_a_public_value_error(self):
+        with patch('worker.image_processing.cv2.imdecode', side_effect=cv2.error('decode')):
+            with self.assertRaisesRegex(ValueError, 'OpenCV image processing failed'):
+                process_image(self.data, 'grayscale', {})
+
+    def test_encode_failure_and_size_limit_remain_enforced(self):
+        for encoded in [(False, np.array([], dtype=np.uint8)),
+                        (True, np.zeros(10 * 1024 * 1024 + 1, dtype=np.uint8))]:
+            with self.subTest(ok=encoded[0]):
+                with patch('worker.image_processing.cv2.imencode', return_value=encoded):
+                    with self.assertRaisesRegex(ValueError, 'Failed to encode output within 10 MiB'):
+                        process_image(self.data, 'grayscale', {})

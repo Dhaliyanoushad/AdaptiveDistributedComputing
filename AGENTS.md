@@ -68,3 +68,11 @@
 - Use scripts/test_all.cmd for complete verification; retain actual logs under ignored outputs/verification. Distinguish interrupted/failed runs from successful reruns and never mark manual/LAN/performance validation complete without evidence.
 - Configuration is inert KEY=value data; terminal environment takes precedence. Never execute .env as shell code, overwrite user configuration, change system security/firewall policies or terminate unrelated processes.
 - README is the current entry point; historical phase records can describe superseded behavior. Current API/architecture/LAN/checklist documents must match source. No additional phase, database, ML or orchestration features.
+
+## Phase 9 clarity and preservation
+
+- Permit UI language/layout/accessibility improvements, student documentation and small readability refactors only. Retain Master, Worker, CPU, RAM, Task, Heartbeat, Static Scheduling and Adaptive Scheduling where useful.
+- Preserve existing API paths/schemas, state values, session/assignment tokens, scheduling formulas/weights/selection, retry limits/semantics, validation order, image operations/output, benchmark formulas, environment names and CMD commands. Do not add unsupported runtime toggles or new features.
+- Benchmarking remains standalone. UI guidance must identify reports as external measured files, never fabricate data or imply adaptive speedup. Retry text must not claim reassignment/completion before recorded evidence.
+- Keep transport, policy and processing separate. Prefer named local helpers over dense expressions, broad rewrites or unnecessary file splitting/dependencies.
+- Keep docs/CODE_WALKTHROUGH.md and docs/FEATURE_CHECKLIST.md aligned with actual files/functions/tests. Future changes still require automated tests, full relevant regressions and updates to all three testing documents. Preserve historical evidence and unexecuted manual/LAN/browser/benchmark status.

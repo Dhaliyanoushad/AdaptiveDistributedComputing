@@ -1,5 +1,34 @@
 # Test results
 
+## Phase 9 baseline and final verification — 2026-11-19
+
+Git was clean before edits. The complete existing suite ran before any Phase 9 modifications, using cmd.exe /d /c scripts\test_all.cmd. All eleven stages completed, exit 0. Baseline local evidence: outputs/verification/94e80d3b-4bde-45c6-83f4-e53f6b289d2d/results.json and per-stage UTF-8 logs. Generated evidence remains ignored, not committed.
+
+After the UI/readability changes and new tests, the same complete command returned 0 with all eleven stages passing. Final local evidence: outputs/verification/46843e24-e75f-4ab3-a551-46348ea7cd95/results.json and per-stage logs; finished_at 2026-11-19T12:07:48.489717+00:00. Each count below is a method/test count; subtests and repeat runs are not added.
+
+| Suite | Baseline passed | Final passed | Final failed | Final errors | Final skipped |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Master including HTTP/security/image contracts | 80 | 81 | 0 | 0 | 0 |
+| Worker including image processing | 32 | 35 | 0 | 0 | 0 |
+| Benchmark | 24 | 24 | 0 | 0 | 0 |
+| Frontend component/API/live-update | 30 | 38 | 0 | 0 | 0 |
+| Setup/contracts | 7 | 7 | 0 | 0 | 0 |
+| **Total** | **173** | **185** | **0** | **0** | **0** |
+
+Baseline also had zero failures/errors/skips. Final durations: Master 5.921 seconds, Worker .326 seconds, benchmark .555 seconds, setup .017 seconds; frontend four files/38 tests, 6.24 seconds. Actual additional stages passed before and after: TypeScript/Vite production build (baseline bundling 2.65 seconds; final 2.55 seconds), both python -m pip check (No broken requirements found), and Master/Worker/frontend launch.py --check (configuration checked; services not started). No dependency installation or audit remediation was performed in Phase 9.
+
+Focused development runs (history, not extra unique passes):
+
+- Worker image suite: 11 passed, 0 failures/errors/skips in .270 seconds using the Worker interpreter.
+- Initial frontend npm test: 38 total, 37 passed and 1 failed, 0 skipped. A newly added retry-text test incorrectly expected completed-state text from the existing running Task fixture. Corrected it to assert the running-state explanation while retaining the recorded-retry assertion. No production workaround or deleted/loosened earlier assertion was used.
+- The production build run immediately after that focused frontend failure passed (2.71 seconds bundling); it did not turn the failed test run into a pass. The final complete rerun above passed all 38 frontend tests and the build.
+
+Verified automatically: original registration/metrics/heartbeat/reconnect, task queue/polling/ownership, scheduling/fairness/fallback, retry/session/assignment/stale-output protection, all-operation ASGI byte round trips with real Worker OpenCV subprocess, benchmark arithmetic/exports, UI navigation/labels/validation/state/history/result links, WebSocket reconnect/poll fallback and setup contracts. New boundary tests protect the extracted image helpers. Master behavior, scheduling/recovery/security, benchmark formulas, frontend transport/client and startup/config scripts have no implementation changes in this phase.
+
+Limits and unresolved issues remain: Master tests use the socket-free test runner/ASGI rather than live Uvicorn TCP; frontend uses jsdom/mocked transport rather than a real browser. No browser screenshots, responsive/accessibility acceptance, clean-machine installation, two-laptop LAN checks, sustained hardware tests or real benchmark trials were performed. Phase 9 does not resolve prior WinError 10013 or npm audit findings (1 moderate/2 critical development findings; the earlier production-only zero does not clear them). In-memory restart loss and trusted-LAN enrollment/security limitations remain. No claim of adaptive speedup or exhaustive correctness is made.
+
+Teammate manual cases, including all preserved Phase 1–8 procedures and P9-01–12, are **NOT YET EXECUTED**; outcome fields remain blank. Docs changes are not test execution. Read later records below as historical phase evidence rather than current limitations superseded by authorized later phases.
+
 ## Phase 8 final verification — 2026-11-19
 
 Actual one-command execution: `cmd.exe /d /c scripts\test_all.cmd` returned **0** after all eleven stages completed. Retained local evidence: `outputs/verification/817a5e54-1b48-4c69-a60f-c4d63c270d78/results.json` and per-stage UTF-8 logs (ignored, not committed).

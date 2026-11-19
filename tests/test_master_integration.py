@@ -43,3 +43,19 @@ class FinalContractTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(status,200)
             self.assertNotIn(b'X-Worker-Session',data)
             self.assertNotIn(b'assignment_token',data)
+
+    async def test_task_and_upload_contracts_preserved(self):
+        schema = self.app.openapi()
+        task = schema['components']['schemas']['Task']['properties']
+        self.assertEqual(task['status']['enum'], ['pending', 'assigned', 'running', 'completed', 'failed'])
+        self.assertEqual(task['operation']['enum'], ['dummy', 'grayscale', 'resize', 'gaussian_blur', 'edge_detection'])
+        upload = schema['paths']['/images/tasks']['post']
+        content = upload['requestBody']['content']['multipart/form-data']['schema']
+        body_name = content['$ref'].split('/')[-1]
+        body = schema['components']['schemas'][body_name]
+        self.assertEqual(set(body['properties']), {'files', 'operation', 'params'})
+        self.assertEqual(set(body['required']), {'files', 'operation'})
+        self.assertEqual(body['properties']['params']['default'], '{}')
+        self.assertIn('409', schema['paths']['/workers/register']['post']['responses'])
+        self.assertEqual(set(schema['components']['schemas']['TaskUpdate']['properties']), {'worker_id'})
+        self.assertEqual(set(schema['components']['schemas']['TaskFailure']['properties']), {'worker_id', 'error', 'retryable'})

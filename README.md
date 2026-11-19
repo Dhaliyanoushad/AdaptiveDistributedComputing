@@ -1,11 +1,12 @@
 # Adaptive Distributed Computing Framework for Heterogeneous Devices
 
-Final-year project coordinating Python workers through a FastAPI master to process images across heterogeneous devices. Phases 1–8 implement communication, image tasks, monitoring, static/adaptive scheduling, bounded recovery, a React dashboard, benchmark tools and a documented handoff. **Implementation completion is not manual validation:** browser, LAN and actual performance experiments remain pending.
+Final-year project coordinating Python workers through a FastAPI master to process images across heterogeneous devices. Phases 1–9 implement communication, image tasks, monitoring, static/adaptive scheduling, bounded recovery, a React dashboard, benchmark tools, a documented handoff and dashboard/code clarity improvements. **Implementation completion is not manual validation:** browser, LAN and actual performance experiments remain pending.
 
 ## Documentation entry points
 
 - [Manual testing guide](docs/TESTING_GUIDE.md) and [execution template](docs/TEST_EXECUTION_TEMPLATE.md)
 - [Two-laptop setup](docs/TWO_LAPTOP_SETUP.md)
+- [Student code walkthrough](docs/CODE_WALKTHROUGH.md), [feature preservation map](docs/FEATURE_CHECKLIST.md)
 - [Architecture](docs/ARCHITECTURE.md), [API reference](docs/API_REFERENCE.md)
 - [Automated suites](docs/AUTOMATED_TESTS.md), [actual results](docs/TEST_RESULTS.md)
 - [Demo sequence](docs/DEMO_GUIDE.md), [final checklist](docs/FINAL_CHECKLIST.md)
@@ -116,3 +117,11 @@ scripts\benchmark_report.cmd --source benchmarks\results --output benchmarks\rep
 - Trusted-LAN prototype: no authenticated enrollment/TLS, persistence, storage quotas or retention service. Legacy static workers cannot reconnect or receive secure retries. Structural output validation is not proof of work by an untrusted worker. No independent deadline exists for a heartbeating-but-hung task.
 - Multipart parsing can spool uploads before endpoint limits. Whole-host metrics/history and UI polling are not performance proof. OS/DNS stalls can exceed nominal HTTP timeouts.
 - Manual/real-browser/LAN/performance acceptance remains for the teammate. Phase 8 completes implementation/handoff, not manual validation. There is no separate phase4.md; its implementation records remain in the testing documents and Git history.
+
+## Phase 9 dashboard and code clarity
+
+The existing six destinations are now labeled Dashboard, Process Images, Workers, Tasks, Results and Scheduling. Upload instructions describe each operation and show submission activity without claiming processing is finished. Worker cards retain CPU/RAM bars, hostname and heartbeat time, and add the existing scheduler's active Task count. Missing/stale values are explicit. Task details explain states and retries while keeping original reasons, assignment history and scores. Scheduling retains every configuration field and shows Static Scheduling or Adaptive Scheduling without a runtime toggle.
+
+Benchmarking remains a standalone command workflow: the Scheduling page explains saved CSV/JSON/Markdown/SVG reports, Throughput, Speedup and Efficiency. It does not load experiments or invent charts/results. Student-readable display helpers and image decode/transform/encode helpers preserve all APIs, scheduling weights/decisions, recovery/session/assignment checks, image operations, environment variables and CMD scripts. No dependencies were added.
+
+Latest actual verification: 185 tests passed (81 Master, 35 Worker, 24 benchmark, 38 frontend, 7 setup), zero failures/errors/skips; production build, both pip checks and launcher checks passed. See TEST_RESULTS.md for baseline and evidence. Browser/mobile/accessibility, clean-machine installation, LAN and real benchmark experiments remain NOT YET EXECUTED. Existing WinError 10013 and development npm advisories remain unresolved.
