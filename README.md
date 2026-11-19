@@ -10,6 +10,30 @@ To select a mode, set `SCHEDULER_MODE=static` or `SCHEDULER_MODE=adaptive` in th
 
 ## Planned architecture
 
+Phase 7 adds a standalone reproducible benchmarking workflow without changing the runtime APIs or dashboard. See [methodology and interpretation](docs/phase7.md) and the pending teammate cases in [TESTING_GUIDE.md](docs/TESTING_GUIDE.md).
+
+Quick setup (CMD, repository root):
+
+```bat
+worker\.venv\Scripts\python.exe -m benchmarks.workload --directory benchmarks\workloads\small-42 --profile small --seed 42
+copy benchmarks\environment.example.json benchmarks\environment.json
+```
+
+Edit the copied metadata with actual hardware/network details. With a fresh static master and exactly one online worker named bench-1:
+
+```bat
+worker\.venv\Scripts\python.exe -m benchmarks.runner --mode single --workers bench-1 --workload benchmarks\workloads\small-42 --operation grayscale --environment benchmarks\environment.json --trials 3 --warmups 1
+```
+
+Restart the isolated master/workers for static and adaptive runs with the same distributed pool. The CLI validates mode/topology; it never changes scheduler configuration or stops workers. Generate reports after collecting modes:
+
+```bat
+worker\.venv\Scripts\python.exe -m benchmarks.report --source benchmarks\results --output benchmarks\reports\experiment-01
+worker\.venv\Scripts\python.exe -m unittest discover -s tests -p test_benchmarks.py -v
+```
+
+Outputs are ignored JSON/CSV/Markdown/SVG artifacts. No actual benchmark performance result or speedup is claimed from automated tests. Frontend development audit findings and earlier WinError 10013 verification limits remain open; see TEST_RESULTS.md.
+
 - **Master:** Python and FastAPI; HTTP worker registration, task inspection, an in-memory FIFO queue and static round-robin assignment. WebSockets remain future work.
 - **Workers:** Python, requests, psutil and OpenCV for future device reporting and image tasks.
 - **Frontend:** React, Vite and Tailwind CSS, to be initialized during the dashboard phase.

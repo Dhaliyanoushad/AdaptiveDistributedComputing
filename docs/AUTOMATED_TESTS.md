@@ -1,4 +1,4 @@
-# Automated tests: Phases 1-6
+# Automated tests: Phases 1-7
 
 This is the inventory and execution guide, not a test result record. See [TEST_RESULTS.md](TEST_RESULTS.md) for observed runs and [TESTING_GUIDE.md](TESTING_GUIDE.md) for the teammate's pending manual checks.
 
@@ -66,6 +66,18 @@ npm audit
 | **Frontend total** | **30** | Mocked network + component tests |
 
 The test fixture module is imported only by tests; the application never imports or displays fabricated fixture statistics. Backend socket tests use fake WebSocket transport but execute the actual stream/snapshot code; CORS tests use the real middleware through ASGI. A live TCP/browser WebSocket connection, layout screenshots, CORS behavior in a real browser and LAN operation remain separate manual checks. Neither jsdom nor fake sockets establish those passes. All earlier image processor subprocess round trips remain in the Python regression command.
+
+## Phase 7 benchmark tests
+
+Run from repository root using the worker environment:
+
+```bat
+worker\.venv\Scripts\python.exe -m unittest discover -s tests -p test_benchmarks.py -v
+```
+
+This command is **additional** to all master/worker/frontend tests and the frontend build, not a substitute. `tests/test_benchmarks.py` currently has 24 test methods for deterministic seeded workloads, preservation of existing data, content IDs/correlation, single/static/adaptive configuration, exact topology/isolation, failed/retried/partial/cancelled records, deadline checks, duplicate response IDs, output dimensions, timing/statistics/missing values, matched comparisons, warmup exclusion, JSON/CSV/SVG reporting, real multipart field names/bytes, network failure, hardware metadata validation and CLI rejection of a changed saved manifest before upload. Clocks/API observations are controlled; all generated inputs/results are temporary fixtures.
+
+Tests of formulas intentionally use synthetic numbers to establish arithmetic correctness. They are never copied to benchmarks/results or claimed as experimental performance. Existing master regressions continue real processor subprocess/ASGI image and recovery round trips; benchmark runner HTTP tests mock transport. A real network image benchmark, browser screenshot and LAN experiment remain unperformed unless separately recorded in TEST_RESULTS.md. No benchmarking UI or backend algorithm was added, so earlier frontend suites remain the relevant dashboard regression.
 
 The production build type-checks source and tests before bundling. A later build found four test queries using an unsupported RTL option; those were corrected without excluding tests from type checking. The installed development test dependency tree has unresolved audit findings recorded in TEST_RESULTS.md; the attempted upgrade was blocked by registry DNS access.
 

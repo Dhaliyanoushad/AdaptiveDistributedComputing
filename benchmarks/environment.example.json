@@ -1,0 +1,11 @@
+{
+  "experiment_id": "REPLACE-with-one-shared-experiment-label",
+  "revision": "REPLACE-with-git-commit",
+  "network": {"kind": "REPLACE-loopback-or-LAN", "notes": "REPLACE-WiFi-band-router-and-competing-traffic"},
+  "master": {"hostname": "REPLACE", "os": "REPLACE", "cpu": "REPLACE", "ram_mb": "REPLACE"},
+  "workers": {
+    "bench-1": {"physical_device": "REPLACE-laptop-A", "hostname": "REPLACE", "cpu": "REPLACE", "ram_mb": "REPLACE", "python": "REPLACE", "opencv": "REPLACE"},
+    "bench-2": {"physical_device": "REPLACE-laptop-B-or-same-A", "hostname": "REPLACE", "cpu": "REPLACE", "ram_mb": "REPLACE", "python": "REPLACE", "opencv": "REPLACE"}
+  },
+  "conditions": "REPLACE-power-profile-temperature-background-apps-and-master-dashboard-load"
+}

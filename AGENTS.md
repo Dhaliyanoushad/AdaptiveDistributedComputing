@@ -55,3 +55,9 @@
 - Never put worker session or assignment tokens in dashboard state, browser storage, public snapshots or URLs. Dashboard requests need no worker credentials. Worker-only originals remain restricted.
 - Snapshot under the store lock, release it before encoding/network sends, bound update frequency and slow sends, and clean up disconnected clients. Frontend subscriptions must reconnect with backoff, provide bounded polling fallback and clean up on unmount.
 - Frontend tests use Vitest/React Testing Library; run tests and production build along with full Python regressions. Record dependency advisories and blocked live/browser verification honestly. No benchmarking/Phase 7, database or new scheduling behavior.
+
+## Phase 7 scope update
+
+- Permit the standalone real-image HTTP benchmark client, seeded workloads, raw JSON/CSV and measured-data reports/SVGs. Do not modify startup-only scheduling through the benchmark client or bypass worker/session/assignment protection.
+- Refuse contaminated topology/task setups, retain invalid/warmup/fault observations and require matched valid repeated trials before speedup/efficiency. Never publish mock test fixtures as experimental results or claim improvement without measurements.
+- Keep generated datasets/results/reports/environment observations ignored. Preserve all phase regression commands and testing documents. No database, benchmarking UI, deployment framework or Phase 8.

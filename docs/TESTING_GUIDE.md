@@ -618,3 +618,124 @@ Upload through the dashboard, observe both workers, interrupt/restart the remote
 | P6-10 | Desktop/mobile keyboard accessibility and screenshots | | |
 | P6-11 | Build/tests and development dependency advisory follow-up | | |
 | P6-LAN | Browser + worker on second laptop; uploads/recovery/results | | |
+
+## 11. Phase 7 benchmarking — NOT YET EXECUTED
+
+These manual/experimental cases are pending, not performance results. Preserve Phases 1-6 checks above. See [phase7.md](phase7.md) for exact boundaries, formulas and validity rules. Do not benchmark production workloads, automatically kill workers or delete unrelated tasks. The standalone runner does not alter scheduler mode or hold worker credentials.
+
+### P7-1: prepare inputs, environment and isolated processes
+
+In CMD at the repository root, using the existing worker environment:
+
+```bat
+worker\.venv\Scripts\python.exe -m benchmarks.workload --directory benchmarks\workloads\small-42 --profile small --seed 42
+worker\.venv\Scripts\python.exe -m benchmarks.workload --directory benchmarks\workloads\medium-42 --profile medium --seed 42
+worker\.venv\Scripts\python.exe -m benchmarks.workload --directory benchmarks\workloads\large-42 --profile large --seed 42
+copy benchmarks\environment.example.json benchmarks\environment.json
+```
+
+Choose new directories rather than overwriting existing data. Expected manifests contain seed, provenance, sorted names, dimensions and input SHA-256 hashes. Defaults are 6 small, 24 medium and 60 large images. Optional --count/--width/--height/--format override these; retain the exact same directory across modes. These are synthetic RGB rectangles, not a photo dataset. A separate real-photo folder can be used with recorded provenance.
+
+Edit every REPLACE value in environment.json. RAM MiB must be a positive number. Worker IDs must match the commands below; hostname must match actual registration. Record both workers' physical-device labels, CPU, RAM, Python/OpenCV versions, master hardware, Git revision, network kind/band/router/traffic and power/background application conditions. Use the identical environment file, including both hardware entries, for all three modes. Do not put passwords or session tokens into metadata. Record whole-host measurements and distinguish multiple processes on one laptop from multiple physical laptops.
+
+Stop only your project processes with Ctrl+C and start a fresh master. Leave dashboard and unrelated uploads stopped for the experiment. Configure non-mode scheduler weights, timeouts and retries identically across all modes. Set VITE/frontend aside so polling load does not differ between trials.
+
+### P7-2: single-device baseline
+
+CMD A:
+
+```bat
+set "SCHEDULER_MODE=static"
+master\.venv\Scripts\python.exe -m uvicorn master.main:app --host 127.0.0.1 --port 8000
+```
+
+CMD B (only this worker online):
+
+```bat
+set "MASTER_URL=http://127.0.0.1:8000"
+set "WORKER_ID=bench-1"
+worker\.venv\Scripts\python.exe worker\worker.py
+```
+
+Wait for regular heartbeats, then CMD D:
+
+```bat
+worker\.venv\Scripts\python.exe -m benchmarks.runner --master-url http://127.0.0.1:8000 --mode single --workers bench-1 --workload benchmarks\workloads\small-42 --operation grayscale --environment benchmarks\environment.json --trials 3 --warmups 1 --timeout 300 --output benchmarks\results
+```
+
+Expected: one warmup plus three measured run UUID folders, each mapping exactly one task per image. Successful baseline work is real JPG/PNG HTTP processing. Worker 2 being online must cause a preflight error, not silently contaminate the baseline. Any unrelated unfinished tasks must also cause refusal. A successful process exit is not proof of a speedup; inspect each run.valid, issues, successful/failed counts and output hashes.
+
+### P7-3: static and adaptive distributed trials
+
+Stop/restart the project master/workers; do not reuse an active mixed workload. Start static master, start bench-1 and bench-2 in separate terminals with the same MASTER_URL and distinct IDs. Repeat the baseline command with:
+
+```bat
+worker\.venv\Scripts\python.exe -m benchmarks.runner --mode static --workers bench-1,bench-2 --workload benchmarks\workloads\small-42 --operation grayscale --environment benchmarks\environment.json --trials 3 --warmups 1 --timeout 300
+```
+
+Restart again with `set "SCHEDULER_MODE=adaptive"`, then start the same two workers and run:
+
+```bat
+worker\.venv\Scripts\python.exe -m benchmarks.runner --mode adaptive --workers bench-1,bench-2 --workload benchmarks\workloads\small-42 --operation grayscale --environment benchmarks\environment.json --trials 3 --warmups 1 --timeout 300
+```
+
+Expected: no runtime scheduler change; mismatch produces refusal. The distributed online worker set must be identical in static/adaptive runs. Reuse input hashes/operations/parameters, record background conditions, and never silently discard a failed trial. Workload tasks can be assigned differently but must retain one task per image. Repeat all three modes for medium/large and operations:
+
+```bat
+worker\.venv\Scripts\python.exe -m benchmarks.runner --mode adaptive --workers bench-1,bench-2 --workload benchmarks\workloads\medium-42 --operation resize --params "{\"width\":640,\"height\":480}" --environment benchmarks\environment.json
+```
+
+For blur use operation gaussian_blur/params kernel_size=5; edges use edge_detection/threshold1=100/threshold2=200. Separate operations form separate comparison groups. Do not pool datasets/parameters/worker hardware. Rotate the mode order in further labeled experiment blocks to investigate cache/thermal/order effects; default warmup/repetition does not eliminate them.
+
+### P7-4: inspect data, graphs and formulas
+
+```bat
+worker\.venv\Scripts\python.exe -m benchmarks.report --source benchmarks\results --output benchmarks\reports\experiment-01
+```
+
+Expected: report.md comparison table, summary.json, trials.csv, tasks.csv, resources.csv and six SVG charts. Pick a new output directory for every report. Open Markdown/CSV/JSON in appropriate local tools and SVGs in a browser. Resources graph shows whole-host last-reported samples, with solid CPU/dashed RAM and client elapsed seconds; repeated heartbeat values are not independent high-frequency samples. Hover series for run/worker identity. Per-run JSON retains raw task snapshots and history/retry reasons. Confirm warmup=true records stay in exports but not means.
+
+Manually recompute successful images / batch elapsed seconds. Then use mean single elapsed / mean distributed elapsed for speedup and divide by allocated participating worker count for efficiency. At least three clean matched trials and one unambiguous baseline are required; invalid trials or mismatched workers prevent comparison. N/A is not zero. Mean/median/sample SD use valid measured trials, and invalid counts remain visible. Confirm configured pool count separately from executing_worker_ids; do not divide by a smaller post-hoc number merely to improve efficiency.
+
+Batch time begins before uploads and ends when all tasks are observed terminal; result downloads/validation are outside this time and inside client_total_seconds. Queue/assigned-to-start/end-to-end times derive from master timestamps. Execution_and_transfer_seconds includes input/output HTTP, OpenCV and validation; pure worker-only CPU processing time is unavailable. Do not label it as such. Retain the same poll interval (default 1 second) across modes and acknowledge completion-detection overhead.
+
+Capture final revision, metadata, command lines, all run UUIDs, report tables/graphs, successful image-output evidence and any failures for the final project report. No example/test measurements may be presented as observed experiments. A lower adaptive time in one trial is not a general performance claim.
+
+### P7-5: fault, contamination, timeout and cancellation cases
+
+- Start an unrelated unfinished task before a trial: expect preflight rejection and no benchmark upload. Start unrelated work during a trial: expect invalid/partial record with isolation issue.
+- Stop an expected worker during real image execution (small images may finish too fast; record an unsuccessful interruption honestly). Expected offline/mismatched topology and/or retry history makes the trial invalid for clean speedup, but raw observations remain. Remaining tasks are not deleted; inspect GET /tasks, then reset only your own isolated experiment explicitly.
+- Use a deliberately short positive --timeout to exercise timeout handling. Expect partial/invalid JSON and possibly still-running server tasks. HTTP/DNS/OS stalls may outlast the nominal deadline; record actual wall time. Ctrl+C during a trial records cancelled/invalid state, without terminating workers. Cancellation during preflight creates no measured trial because submission has not begun.
+- Disconnect the master/network during upload. A POST may have succeeded remotely even if its response was lost: record uncertain submission and inspect server tasks before a new run. Never replay blindly or treat unknown task count as success.
+- Change the input image after manifest inspection or duplicate/corrupt outputs: expect invalid success criteria, not a valid comparison. Existing assignment fencing still prevents stale worker results from replacing accepted output.
+- Retry/failed trials remain in CSV/JSON and cause speedup N/A. Do not delete them merely to generate a favorable comparison. New clean experiments need a new label/report, with the earlier failure retained.
+
+### P7-6: separate LAN evaluation
+
+First complete the earlier two-laptop connectivity/image checks. No LAN benchmark is claimed as performed. Start a master bound to 0.0.0.0 on a trusted Private network, use its actual Wi-Fi/wired IPv4 in --master-url and remote MASTER_URL, and register exactly bench-1/bench-2. Do not use 0.0.0.0 as a destination or copy source images to the remote worker. Keep source benchmark workload on the benchmark-client machine and use real HTTP transfers.
+
+Create metadata with distinct physical_device labels and accurate network details; do not mix loopback and LAN experiments under one metadata label. Run the same baseline/static/adaptive protocol with separate restarts and repeat counts. Test remote-worker disconnect and preserve invalid trial evidence. Record latency/other network traffic qualitatively unless actually measured. Master on the baseline laptop adds local contention; report it explicitly. Never claim distributed/adaptive is faster without complete measured results supporting that specific setup.
+
+### Troubleshooting and remaining issues
+
+| Symptom | Interpretation/action |
+| --- | --- |
+| Mode mismatch | Restart an isolated master in required startup mode; no runtime toggle |
+| Expected online workers mismatch | Stop unintended project workers or wait for expected registrations/heartbeats; do not silently change the intended pool |
+| Metadata/hostname refusal | Replace template placeholders with observed hardware; do not invent specs |
+| Comparison N/A | Inspect invalid counts, >=3 trials, exact workload/config/environment group, baseline uniqueness and distributed worker set |
+| Deadline exceeded | Preserve partial record; check active server tasks before rerun |
+| WinError 10013 | Earlier socket restriction remains open; ASGI unit tests are not live benchmark passes |
+| npm development audit findings | Rechecked: 1 moderate/2 critical; compatible upgrade attempt still blocked by DNS, not fixed |
+
+| ID | Phase 7 manual/experiment case | Pass/Fail/Blocked | Evidence / retest |
+| --- | --- | --- | --- |
+| P7-1 | Seeded workloads, hashes/provenance and actual metadata | | |
+| P7-2 | Single online-worker baseline, warmup plus >=3 trials | | |
+| P7-3 | Same-workload static and adaptive distributed trials | | |
+| P7-4 | CPU/RAM samples, task distribution, timing boundaries | | |
+| P7-5 | CSV/JSON round trip, tables and actual-data SVGs | | |
+| P7-6 | Independent speedup/efficiency/statistics calculation | | |
+| P7-7 | Fault/retry/partial trials retained and comparisons invalidated | | |
+| P7-8 | Contamination, cancellation and timeout safety | | |
+| P7-LAN | Separate two-physical-laptop experiment with evidence | | |
